@@ -11,6 +11,10 @@ const links = [[{
   icon: 'i-lucide-users',
   to: '/settings/members'
 }, {
+  label: 'BPO Thresholds',
+  icon: 'i-lucide-target',
+  to: '/settings/bpo-thresholds'
+}, {
   label: 'Notifications',
   icon: 'i-lucide-bell',
   to: '/settings/notifications'
@@ -42,7 +46,7 @@ const links = [[{
     </template>
 
     <template #body>
-      <div class="flex flex-col gap-4 sm:gap-6 lg:gap-12 w-full lg:max-w-2xl mx-auto">
+      <div class="flex flex-col gap-4 sm:gap-6 lg:gap-12 w-full mx-auto" :class="$route.path === '/settings/bpo-thresholds' ? '' : 'lg:max-w-2xl'">
         <NuxtPage />
       </div>
     </template>

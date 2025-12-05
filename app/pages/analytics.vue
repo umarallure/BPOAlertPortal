@@ -13,18 +13,21 @@ const items = [[{
   icon: 'i-lucide-list'
 }]] satisfies DropdownMenuItem[][]
 
-const today = new Date()
 const range = shallowRef<Range>({
-  start: today,
-  end: today
+  start: sub(new Date(), { days: 30 }),
+  end: new Date()
 })
 const period = ref<Period>('daily')
+
+definePageMeta({
+  name: 'home'
+})
 </script>
 
 <template>
   <UDashboardPanel id="home">
     <template #header>
-      <UDashboardNavbar title="Score Board" :ui="{ right: 'gap-3' }">
+      <UDashboardNavbar title="Analytics" :ui="{ right: 'gap-3' }">
         <template #leading>
           <UDashboardSidebarCollapse />
         </template>

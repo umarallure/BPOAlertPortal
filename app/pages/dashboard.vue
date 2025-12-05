@@ -1,30 +1,31 @@
 <script setup lang="ts">
-import type { DropdownMenuItem } from '@nuxt/ui'
 import { sub } from 'date-fns'
+import type { DropdownMenuItem } from '@nuxt/ui'
 import type { Period, Range } from '~/types'
 
 const { isNotificationsSlideoverOpen } = useDashboard()
 
 const items = [[{
-  label: 'Export Report',
-  icon: 'i-lucide-download',
+  label: 'New mail',
+  icon: 'i-lucide-send',
+  to: '/inbox'
 }, {
-  label: 'View Details',
-  icon: 'i-lucide-list'
+  label: 'New customer',
+  icon: 'i-lucide-user-plus',
+  to: '/customers'
 }]] satisfies DropdownMenuItem[][]
 
-const today = new Date()
 const range = shallowRef<Range>({
-  start: today,
-  end: today
+  start: sub(new Date(), { days: 14 }),
+  end: new Date()
 })
 const period = ref<Period>('daily')
 </script>
 
 <template>
-  <UDashboardPanel id="home">
+  <UDashboardPanel id="dashboard">
     <template #header>
-      <UDashboardNavbar title="Score Board" :ui="{ right: 'gap-3' }">
+      <UDashboardNavbar title="Dashboard" :ui="{ right: 'gap-3' }">
         <template #leading>
           <UDashboardSidebarCollapse />
         </template>
@@ -44,13 +45,14 @@ const period = ref<Period>('daily')
           </UTooltip>
 
           <UDropdownMenu :items="items">
-            <UButton icon="i-lucide-more-horizontal" color="neutral" variant="ghost" />
+            <UButton icon="i-lucide-plus" size="md" class="rounded-full" />
           </UDropdownMenu>
         </template>
       </UDashboardNavbar>
 
       <UDashboardToolbar>
         <template #left>
+          <!-- NOTE: The `-ms-1` class is used to align with the `DashboardSidebarCollapse` button here. -->
           <HomeDateRangePicker v-model="range" class="-ms-1" />
 
           <HomePeriodSelect v-model="period" :range="range" />
@@ -59,19 +61,9 @@ const period = ref<Period>('daily')
     </template>
 
     <template #body>
-      <div class="space-y-6">
-        <!-- Key Metrics Section -->
-        <div>
-          <h2 class="text-lg font-semibold text-highlighted mb-4">Key Metrics</h2>
-          <AnalyticsStats :period="period" :range="range" />
-        </div>
-
-        <!-- Performance Section -->
-        <div>
-          <h2 class="text-lg font-semibold text-highlighted mb-4">Performance Rates</h2>
-          <AnalyticsRates :period="period" :range="range" />
-        </div>
-      </div>
+      <HomeStats :period="period" :range="range" />
+      <HomeChart :period="period" :range="range" />
+      <HomeSales :period="period" :range="range" />
     </template>
   </UDashboardPanel>
 </template>

@@ -6,25 +6,62 @@ const toast = useToast()
 
 const open = ref(false)
 
-const links = [[{
-  label: 'Home',
-  icon: 'i-lucide-house',
+const links = [[
+ 
+{
+  label: 'Score Board',
+  icon: 'i-lucide-chart-bar',
   to: '/',
   onSelect: () => {
+    open.value = false}
+},
+
+{
+  label: 'Daily Deal Flow',
+  icon: 'i-lucide-clipboard-list',
+  to: '/daily-deal-flow',
+  onSelect: () => {
     open.value = false
   }
-}, {
-  label: 'Inbox',
-  icon: 'i-lucide-inbox',
-  to: '/inbox',
-  badge: '4',
+},
+
+{
+  label: 'Dashboard',
+  icon: 'i-lucide-layout-dashboard',
+  to: '/dashboard',
+  onSelect: () => {
+    open.value = false
+  }
+},
+
+{
+  label: 'Analytics',
+  icon: 'i-lucide-chart-line',
+  to: '/analytics',
+  onSelect: () => {
+    open.value = false
+  }
+}, 
+
+{
+  label: 'BPO Centers',
+  icon: 'i-lucide-building-2',
+  to: '/bpo-centers',
   onSelect: () => {
     open.value = false
   }
 }, {
-  label: 'Customers',
-  icon: 'i-lucide-users',
-  to: '/customers',
+  label: 'Alerts',
+  icon: 'i-lucide-bell',
+  to: '/alerts',
+  badge: '3',
+  onSelect: () => {
+    open.value = false
+  }
+}, {
+  label: 'Reports',
+  icon: 'i-lucide-bar-chart-3',
+  to: '/reports',
   onSelect: () => {
     open.value = false
   }
@@ -42,34 +79,30 @@ const links = [[{
       open.value = false
     }
   }, {
-    label: 'Members',
-    to: '/settings/members',
+    label: 'Alert Rules',
+    to: '/settings/alert-rules',
     onSelect: () => {
       open.value = false
     }
   }, {
-    label: 'Notifications',
-    to: '/settings/notifications',
+    label: 'Thresholds',
+    to: '/settings/thresholds',
     onSelect: () => {
       open.value = false
     }
   }, {
-    label: 'Security',
-    to: '/settings/security',
+    label: 'BPO Thresholds',
+    to: '/settings/bpo-thresholds',
+    onSelect: () => {
+      open.value = false
+    }
+  }, {
+    label: 'Integrations',
+    to: '/settings/integrations',
     onSelect: () => {
       open.value = false
     }
   }]
-}], [{
-  label: 'Feedback',
-  icon: 'i-lucide-message-circle',
-  to: 'https://github.com/nuxt-ui-templates/dashboard',
-  target: '_blank'
-}, {
-  label: 'Help & Support',
-  icon: 'i-lucide-info',
-  to: 'https://github.com/nuxt-ui-templates/dashboard',
-  target: '_blank'
 }]] satisfies NavigationMenuItem[][]
 
 const groups = computed(() => [{

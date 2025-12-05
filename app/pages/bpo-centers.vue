@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import type { DropdownMenuItem } from '@nuxt/ui'
-import { sub } from 'date-fns'
 import type { Period, Range } from '~/types'
 
 const { isNotificationsSlideoverOpen } = useDashboard()
@@ -22,9 +21,9 @@ const period = ref<Period>('daily')
 </script>
 
 <template>
-  <UDashboardPanel id="home">
+  <UDashboardPanel id="bpo-centers">
     <template #header>
-      <UDashboardNavbar title="Score Board" :ui="{ right: 'gap-3' }">
+      <UDashboardNavbar title="BPO Center Performance" :ui="{ right: 'gap-3' }">
         <template #leading>
           <UDashboardSidebarCollapse />
         </template>
@@ -60,16 +59,10 @@ const period = ref<Period>('daily')
 
     <template #body>
       <div class="space-y-6">
-        <!-- Key Metrics Section -->
+        <!-- BPO Center Cards Section -->
         <div>
-          <h2 class="text-lg font-semibold text-highlighted mb-4">Key Metrics</h2>
-          <AnalyticsStats :period="period" :range="range" />
-        </div>
-
-        <!-- Performance Section -->
-        <div>
-          <h2 class="text-lg font-semibold text-highlighted mb-4">Performance Rates</h2>
-          <AnalyticsRates :period="period" :range="range" />
+          <h2 class="text-lg font-semibold text-highlighted mb-4">Center Performance</h2>
+          <BpoCenterCards :period="period" :range="range" />
         </div>
       </div>
     </template>

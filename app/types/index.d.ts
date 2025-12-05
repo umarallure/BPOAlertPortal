@@ -2,6 +2,8 @@ import type { AvatarProps } from '@nuxt/ui'
 
 export type UserStatus = 'subscribed' | 'unsubscribed' | 'bounced'
 export type SaleStatus = 'paid' | 'failed' | 'refunded'
+export type DealFlowStatus = 'Pending Approval' | 'DQ' | 'Callback' | 'Approved' | 'Rejected'
+export type CallResult = 'Submitted' | 'Underwriting' | 'Not Qualified' | 'Callback Scheduled' | 'Quality Issue' | 'Failed Quality Check'
 
 export interface User {
   id: number
@@ -10,6 +12,42 @@ export interface User {
   avatar?: AvatarProps
   status: UserStatus
   location: string
+}
+
+export interface DailyDealFlow {
+  id: string
+  submission_id: string
+  client_phone_number: string | null
+  lead_vendor: string | null
+  date: string | null
+  insured_name: string | null
+  buffer_agent: string | null
+  agent: string | null
+  licensed_agent_account: string | null
+  status: string | null
+  call_result: string | null
+  carrier: string | null
+  product_type: string | null
+  draft_date: string | null
+  monthly_premium: number | null
+  face_amount: number | null
+  from_callback: boolean | null
+  notes: string | null
+  policy_number: string | null
+  carrier_audit: string | null
+  product_type_carrier: string | null
+  level_or_gi: string | null
+  created_at: string | null
+  updated_at: string | null
+  is_callback: boolean | null
+  is_retention_call: boolean | null
+  placement_status: string | null
+  ghl_location_id: string | null
+  ghl_opportunity_id: string | null
+  ghlcontactid: string | null
+  sync_status: string | null
+  retention_agent: string | null
+  retention_agent_id: string | null
 }
 
 export interface Mail {
