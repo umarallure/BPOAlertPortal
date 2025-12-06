@@ -22,6 +22,8 @@ const centers = ref<CenterThreshold[]>([])
 const selectedCenter = ref<CenterThreshold | null>(null)
 const isEditModalOpen = ref(false)
 const editingRows = ref<Set<string>>(new Set())
+const searchQuery = ref('')
+const selectedTier = ref<string | null>(null)
 
 const tierOptions = [
   { label: 'Tier A - Premium', value: 'A', color: 'success' },
@@ -110,6 +112,26 @@ const totalWeight = computed(() => {
   return selectedCenter.value.transfer_weight + selectedCenter.value.approval_ratio_weight + selectedCenter.value.dq_weight
 })
 
+const filteredCenters = computed(() => {
+  let result = centers.value
+
+  // Filter by search query
+  if (searchQuery.value) {
+    const query = searchQuery.value.toLowerCase()
+    result = result.filter(center => 
+      center.center_name.toLowerCase().includes(query) ||
+      center.lead_vendor.toLowerCase().includes(query)
+    )
+  }
+
+  // Filter by tier
+  if (selectedTier.value) {
+    result = result.filter(center => center.tier === selectedTier.value)
+  }
+
+  return result
+})
+
 onMounted(() => {
   loadCenters()
 })
@@ -167,18 +189,45 @@ onMounted(() => {
       <!-- Centers List -->
       <UCard :ui="{ body: '!p-0' }">
         <template #header>
-          <div class="flex items-center justify-between">
-            <h3 class="text-sm font-semibold text-highlighted">Centers Configuration</h3>
-            <UButton 
-              icon="i-lucide-refresh-cw"
-              color="neutral"
-              variant="ghost"
-              size="sm"
-              :loading="loading"
-              @click="loadCenters"
-            >
-              Refresh
-            </UButton>
+          <div class="space-y-4">
+            <div class="flex items-center justify-between">
+              <h3 class="text-sm font-semibold text-highlighted">Centers Configuration</h3>
+              <UButton 
+                icon="i-lucide-refresh-cw"
+                color="neutral"
+                variant="ghost"
+                size="sm"
+                :loading="loading"
+                @click="loadCenters"
+              >
+                Refresh
+              </UButton>
+            </div>
+            
+            <!-- Search and Filter -->
+            <div class="flex gap-3">
+              <UInput
+                v-model="searchQuery"
+                icon="i-lucide-search"
+                placeholder="Search by center name or lead vendor..."
+                class="flex-1"
+                size="sm"
+              />
+              <USelectMenu
+                v-model="selectedTier"
+                :options="[
+                  { label: 'All Tiers', value: null },
+                  { label: 'Tier A', value: 'A' },
+                  { label: 'Tier B', value: 'B' },
+                  { label: 'Tier C', value: 'C' }
+                ]"
+                option-attribute="label"
+                value-attribute="value"
+                placeholder="Filter by tier"
+                size="sm"
+                class="w-48"
+              />
+            </div>
           </div>
         </template>
 
@@ -197,8 +246,24 @@ onMounted(() => {
               </tr>
             </thead>
             <tbody>
+              <tr v-if="filteredCenters.length === 0">
+                <td colspan="8" class="px-4 py-8 text-center">
+                  <div class="flex flex-col items-center gap-2">
+                    <UIcon name="i-lucide-search-x" class="size-8 text-muted" />
+                    <p class="text-sm text-muted">No centers found matching your search criteria</p>
+                    <UButton 
+                      v-if="searchQuery || selectedTier"
+                      variant="ghost" 
+                      size="sm"
+                      @click="searchQuery = ''; selectedTier = null"
+                    >
+                      Clear filters
+                    </UButton>
+                  </div>
+                </td>
+              </tr>
               <tr 
-                v-for="center in centers" 
+                v-for="center in filteredCenters" 
                 :key="center.id"
                 class="border-b border-default hover:bg-muted/5 transition-colors"
               >
