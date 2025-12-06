@@ -6,7 +6,7 @@ export default defineNuxtConfig({
     '@vueuse/nuxt'
   ],
 
-  ssr: true,
+  ssr: false,
 
   srcDir: 'app/',
 

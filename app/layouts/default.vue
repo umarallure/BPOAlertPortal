@@ -44,7 +44,7 @@ const links = [[
 }, 
 
 {
-  label: 'BPO Centers',
+  label: 'BPOs Performance',
   icon: 'i-lucide-building-2',
   to: '/bpo-centers',
   onSelect: () => {
@@ -78,31 +78,30 @@ const links = [[
     onSelect: () => {
       open.value = false
     }
-  }, {
-    label: 'Alert Rules',
-    to: '/settings/alert-rules',
-    onSelect: () => {
-      open.value = false
-    }
-  }, {
-    label: 'Thresholds',
-    to: '/settings/thresholds',
-    onSelect: () => {
-      open.value = false
-    }
-  }, {
+  }, 
+  {
     label: 'BPO Thresholds',
     to: '/settings/bpo-thresholds',
     onSelect: () => {
       open.value = false
     }
-  }, {
+  },
+  {
+    label: 'Alert Rules',
+    to: '/settings/alert-rules',
+    onSelect: () => {
+      open.value = false
+    }
+  },   
+  {
     label: 'Integrations',
     to: '/settings/integrations',
     onSelect: () => {
       open.value = false
     }
-  }]
+  }
+  
+  ]
 }]] satisfies NavigationMenuItem[][]
 
 const groups = computed(() => [{

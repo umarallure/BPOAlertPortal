@@ -96,3 +96,18 @@ export interface Range {
   start: Date
   end: Date
 }
+
+export interface AlertRule {
+  id: string
+  rule_name: string
+  description?: string
+  rule_type: string
+  priority: string
+  alert_message_template: string
+  condition_settings: any
+  is_active: boolean
+  channels: string[]
+  recipients: string[]
+  created_at?: string
+  updated_at?: string
+}

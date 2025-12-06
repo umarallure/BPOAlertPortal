@@ -15,6 +15,8 @@ interface CenterThreshold {
   approval_ratio_weight: number
   dq_weight: number
   is_active: boolean
+  slack_webhook_url?: string
+  slack_channel?: string
 }
 
 const loading = ref(false)
@@ -43,20 +45,26 @@ const toggleEdit = (centerId: string) => {
 
 const loadCenters = async () => {
   loading.value = true
-  const { data, error } = await supabase
+  
+  // Fetch thresholds
+  const { data: thresholds, error: thresholdsError } = await supabase
     .from('center_thresholds')
     .select('*')
     .order('tier', { ascending: true })
     .order('center_name', { ascending: true })
   
-  if (error) {
+  if (thresholdsError) {
     toast.add({
       title: 'Error loading centers',
-      description: error.message,
+      description: thresholdsError.message,
       color: 'error'
     })
-  } else {
-    centers.value = data || []
+    loading.value = false
+    return
+  }
+
+  if (thresholds) {
+    centers.value = thresholds
   }
   loading.value = false
 }
@@ -68,7 +76,9 @@ const openEditModal = (center: CenterThreshold) => {
 
 const saveCenter = async (center: CenterThreshold) => {
   loading.value = true
-  const { error } = await supabase
+  
+  // Update thresholds
+  const { error: thresholdError } = await supabase
     .from('center_thresholds')
     .update({
       tier: center.tier,
@@ -80,14 +90,16 @@ const saveCenter = async (center: CenterThreshold) => {
       approval_ratio_weight: center.approval_ratio_weight,
       dq_weight: center.dq_weight,
       is_active: center.is_active,
+      slack_webhook_url: center.slack_webhook_url,
+      slack_channel: center.slack_channel,
       updated_at: new Date().toISOString()
     })
     .eq('id', center.id)
   
-  if (error) {
+  if (thresholdError) {
     toast.add({
-      title: 'Error saving center',
-      description: error.message,
+      title: 'Error saving center thresholds',
+      description: thresholdError.message,
       color: 'error'
     })
   } else {
@@ -241,6 +253,7 @@ onMounted(() => {
                 <th class="text-center text-xs font-semibold text-muted uppercase px-4 py-3">Sales Target</th>
                 <th class="text-center text-xs font-semibold text-muted uppercase px-4 py-3">Max DQ %</th>
                 <th class="text-center text-xs font-semibold text-muted uppercase px-4 py-3">Min Approval %</th>
+                <th class="text-center text-xs font-semibold text-muted uppercase px-4 py-3">Slack Config</th>
                 <th class="text-center text-xs font-semibold text-muted uppercase px-4 py-3">Status</th>
                 <th class="text-right text-xs font-semibold text-muted uppercase px-4 py-3 sticky right-0 bg-muted/5 z-10">Actions</th>
               </tr>
@@ -331,6 +344,28 @@ onMounted(() => {
                     class="max-w-[100px] mx-auto"
                   />
                   <span v-else class="font-semibold">{{ center.min_approval_ratio }}%</span>
+                </td>
+                <td class="px-4 py-3 text-center">
+                  <div v-if="isEditing(center.id)" class="space-y-2 min-w-[200px]">
+                    <UInput
+                      v-model="center.slack_webhook_url"
+                      placeholder="Webhook URL"
+                      size="sm"
+                      type="password"
+                    />
+                    <UInput
+                      v-model="center.slack_channel"
+                      placeholder="#channel"
+                      size="sm"
+                    />
+                  </div>
+                  <div v-else class="flex flex-col items-center gap-1">
+                    <UBadge v-if="center.slack_webhook_url" color="primary" variant="subtle" size="xs">
+                      <UIcon name="i-lucide-bell" class="mr-1" /> Configured
+                    </UBadge>
+                    <span v-else class="text-xs text-muted">Not configured</span>
+                    <span v-if="center.slack_channel" class="text-xs text-muted">{{ center.slack_channel }}</span>
+                  </div>
                 </td>
                 <td class="px-4 py-3 text-center">
                   <UToggle
