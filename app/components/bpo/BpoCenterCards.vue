@@ -34,7 +34,7 @@ interface BpoCenterMetric {
   trend: number
   performanceScore: number
   rank: number
-  performanceCategory: 'green' | 'yellow' | 'red'
+  performanceCategory: 'green' | 'yellow' | 'red' | 'gray'
   targetProgress: number
   color: string
 }
@@ -91,8 +91,14 @@ const getPerformanceCategory = (
   score: number,
   approvalRatio: number,
   dqRate: number,
-  threshold: CenterThreshold
-): 'green' | 'yellow' | 'red' => {
+  threshold: CenterThreshold,
+  totalTransfers: number
+): 'green' | 'yellow' | 'red' | 'gray' => {
+  // Gray: Zero transfers
+  if (totalTransfers === 0) {
+    return 'gray'
+  }
+
   // Green: High score (≥80) AND meets approval & DQ thresholds
   if (
     score >= 80 &&
@@ -202,9 +208,21 @@ const { data: centers } = await useAsyncData<BpoCenterMetric[]>(
       
       // Calculate metrics and scores
       const result: BpoCenterMetric[] = []
-      vendorMap.forEach((metrics, vendor) => {
-        const threshold = thresholdMap.get(vendor)
-        if (!threshold) return // Skip centers without thresholds
+      
+      // Iterate over all active thresholds to ensure even centers with 0 transfers are shown
+      thresholdMap.forEach((threshold, vendor) => {
+        let metrics = vendorMap.get(vendor)
+        
+        // If no metrics found (0 transfers), create default zero-metrics object
+        if (!metrics) {
+          metrics = {
+            centerName: vendor,
+            leadVendor: vendor,
+            totalTransfers: 0,
+            pendingApproval: 0,
+            dqCount: 0
+          }
+        }
         
         // Calculate ratios
         metrics.approvalRatio = metrics.totalTransfers > 0 
@@ -231,7 +249,8 @@ const { data: centers } = await useAsyncData<BpoCenterMetric[]>(
           metrics.performanceScore,
           metrics.approvalRatio,
           metrics.dqRate,
-          threshold
+          threshold,
+          metrics.totalTransfers
         )
         
         // Target progress
@@ -242,7 +261,8 @@ const { data: centers } = await useAsyncData<BpoCenterMetric[]>(
         metrics.color = {
           'green': 'success',
           'yellow': 'warning',
-          'red': 'error'
+          'red': 'error',
+          'gray': 'gray'
         }[metrics.performanceCategory]
         
         result.push(metrics as BpoCenterMetric)
@@ -256,12 +276,13 @@ const { data: centers } = await useAsyncData<BpoCenterMetric[]>(
         center.rank = index + 1
       })
       
-      // Group by performance category (green, yellow, red)
+      // Group by performance category (green, yellow, red, gray)
       const greenCenters = result.filter(c => c.performanceCategory === 'green')
       const yellowCenters = result.filter(c => c.performanceCategory === 'yellow')
       const redCenters = result.filter(c => c.performanceCategory === 'red')
+      const grayCenters = result.filter(c => c.performanceCategory === 'gray')
       
-      return [...greenCenters, ...yellowCenters, ...redCenters]
+      return [...greenCenters, ...yellowCenters, ...redCenters, ...grayCenters]
     } catch (err) {
       console.error('BPO centers error:', err)
       return []
@@ -276,21 +297,36 @@ const { data: centers } = await useAsyncData<BpoCenterMetric[]>(
 const greenCenters = computed(() => centers.value?.filter(c => c.performanceCategory === 'green') || [])
 const yellowCenters = computed(() => centers.value?.filter(c => c.performanceCategory === 'yellow') || [])
 const redCenters = computed(() => centers.value?.filter(c => c.performanceCategory === 'red') || [])
+const grayCenters = computed(() => centers.value?.filter(c => c.performanceCategory === 'gray') || [])
+
+const sectionOpen = ref({
+  green: true,
+  yellow: true,
+  red: true,
+  gray: true
+})
 </script>
 
 <template>
   <div class="space-y-8">
     <!-- Green Centers (Top Performers) -->
     <div v-if="greenCenters.length > 0">
-      <div class="flex items-center gap-2 mb-4">
+      <div 
+        class="flex items-center gap-2 mb-4 cursor-pointer select-none hover:opacity-80 transition-opacity"
+        @click="sectionOpen.green = !sectionOpen.green"
+      >
         <div class="p-2 rounded-full bg-success/10">
           <UIcon name="i-lucide-trophy" class="text-success size-5" />
         </div>
         <h3 class="text-lg font-semibold text-success">Top Performers</h3>
         <UBadge color="success" variant="subtle">{{ greenCenters.length }} Centers</UBadge>
+        <UIcon 
+          :name="sectionOpen.green ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'" 
+          class="ml-auto size-5 text-muted" 
+        />
       </div>
       
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+      <div v-show="sectionOpen.green" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         <div
           v-for="(center, index) in greenCenters"
           :key="index"
@@ -364,15 +400,22 @@ const redCenters = computed(() => centers.value?.filter(c => c.performanceCatego
 
     <!-- Yellow Centers (Average Performers) -->
     <div v-if="yellowCenters.length > 0">
-      <div class="flex items-center gap-2 mb-4">
+      <div 
+        class="flex items-center gap-2 mb-4 cursor-pointer select-none hover:opacity-80 transition-opacity"
+        @click="sectionOpen.yellow = !sectionOpen.yellow"
+      >
         <div class="p-2 rounded-full bg-warning/10">
           <UIcon name="i-lucide-medal" class="text-warning size-5" />
         </div>
         <h3 class="text-lg font-semibold text-warning">Average Performers</h3>
         <UBadge color="warning" variant="subtle">{{ yellowCenters.length }} Centers</UBadge>
+        <UIcon 
+          :name="sectionOpen.yellow ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'" 
+          class="ml-auto size-5 text-muted" 
+        />
       </div>
       
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+      <div v-show="sectionOpen.yellow" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         <div
           v-for="(center, index) in yellowCenters"
           :key="index"
@@ -446,15 +489,22 @@ const redCenters = computed(() => centers.value?.filter(c => c.performanceCatego
 
     <!-- Red Centers (Needs Improvement) -->
     <div v-if="redCenters.length > 0">
-      <div class="flex items-center gap-2 mb-4">
+      <div 
+        class="flex items-center gap-2 mb-4 cursor-pointer select-none hover:opacity-80 transition-opacity"
+        @click="sectionOpen.red = !sectionOpen.red"
+      >
         <div class="p-2 rounded-full bg-error/10">
           <UIcon name="i-lucide-alert-triangle" class="text-error size-5" />
         </div>
         <h3 class="text-lg font-semibold text-error">Needs Improvement</h3>
         <UBadge color="error" variant="subtle">{{ redCenters.length }} Centers</UBadge>
+        <UIcon 
+          :name="sectionOpen.red ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'" 
+          class="ml-auto size-5 text-muted" 
+        />
       </div>
       
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+      <div v-show="sectionOpen.red" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         <div
           v-for="(center, index) in redCenters"
           :key="index"
@@ -526,8 +576,97 @@ const redCenters = computed(() => centers.value?.filter(c => c.performanceCatego
       </div>
     </div>
 
+    <!-- Gray Centers (Zero Transfer) -->
+    <div v-if="grayCenters.length > 0">
+      <div 
+        class="flex items-center gap-2 mb-4 cursor-pointer select-none hover:opacity-80 transition-opacity"
+        @click="sectionOpen.gray = !sectionOpen.gray"
+      >
+        <div class="p-2 rounded-full bg-gray-100 dark:bg-gray-800">
+          <UIcon name="i-lucide-minus-circle" class="text-gray-500 size-5" />
+        </div>
+        <h3 class="text-lg font-semibold text-gray-500">Zero Transfer for the Day</h3>
+        <UBadge color="gray" variant="subtle">{{ grayCenters.length }} Centers</UBadge>
+        <UIcon 
+          :name="sectionOpen.gray ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'" 
+          class="ml-auto size-5 text-muted" 
+        />
+      </div>
+      
+      <div v-show="sectionOpen.gray" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div
+          v-for="(center, index) in grayCenters"
+          :key="index"
+          class="bg-card rounded-lg border-2 border-gray-200 dark:border-gray-800 p-4 hover:shadow-lg transition-all relative overflow-hidden opacity-75 hover:opacity-100"
+        >
+          <!-- Performance Badge -->
+          <div class="absolute top-2 right-2">
+            <UBadge color="gray" variant="solid" size="xs">
+              Score: {{ center.performanceScore }}
+            </UBadge>
+          </div>
+
+          <!-- Header -->
+          <div class="flex items-start justify-between mb-4 pr-20">
+            <div class="flex-1">
+              <p class="text-sm font-medium text-muted uppercase">Rank #{{ center.rank }}</p>
+              <h3 class="text-lg font-bold text-highlighted mt-1">{{ center.centerName }}</h3>
+              <UBadge :color="center.tier === 'A' ? 'success' : center.tier === 'B' ? 'warning' : 'error'" variant="outline" size="xs" class="mt-1">
+                Tier {{ center.tier }}
+              </UBadge>
+            </div>
+          </div>
+
+          <!-- Metrics Grid -->
+          <div class="grid grid-cols-2 gap-3 mb-4">
+            <div class="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 border border-gray-100 dark:border-gray-800">
+              <p class="text-xs text-muted uppercase mb-1">Transfers</p>
+              <p class="text-2xl font-bold text-highlighted">{{ center.totalTransfers }}</p>
+              <UProgress :value="center.targetProgress" color="gray" size="xs" class="mt-2" />
+              <p class="text-xs text-muted mt-1">{{ center.targetProgress }}% of target</p>
+            </div>
+
+            <div class="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 border border-gray-100 dark:border-gray-800">
+              <p class="text-xs text-muted uppercase mb-1">Pending</p>
+              <p class="text-2xl font-bold text-gray-500">{{ center.pendingApproval }}</p>
+            </div>
+
+            <div class="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 border border-gray-100 dark:border-gray-800">
+              <p class="text-xs text-muted uppercase mb-1">DQ Rate</p>
+              <p class="text-2xl font-bold text-gray-500">{{ center.dqRate }}%</p>
+            </div>
+
+            <div class="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 border border-gray-100 dark:border-gray-800">
+              <p class="text-xs text-muted uppercase mb-1">Approval %</p>
+              <p class="text-2xl font-bold text-gray-500">{{ center.approvalRatio }}%</p>
+            </div>
+          </div>
+
+          <!-- Trend Indicator -->
+          <div class="flex items-center justify-between pt-3 border-t border-gray-100 dark:border-gray-800">
+            <span class="text-xs text-muted">vs Yesterday</span>
+            <div class="flex items-center gap-1">
+              <UIcon 
+                :name="center.trend > 0 ? 'i-lucide-trending-up' : center.trend < 0 ? 'i-lucide-trending-down' : 'i-lucide-minus'" 
+                :class="center.trend > 0 ? 'text-success' : center.trend < 0 ? 'text-error' : 'text-muted'"
+                class="size-4"
+              />
+              <span 
+                :class="[
+                  'text-sm font-semibold',
+                  center.trend > 0 ? 'text-success' : center.trend < 0 ? 'text-error' : 'text-muted'
+                ]"
+              >
+                {{ center.trend > 0 ? '+' : '' }}{{ center.trend }}%
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Empty State -->
-    <div v-if="!greenCenters.length && !yellowCenters.length && !redCenters.length" class="text-center py-12">
+    <div v-if="!greenCenters.length && !yellowCenters.length && !redCenters.length && !grayCenters.length" class="text-center py-12">
       <UIcon name="i-lucide-building-2" class="size-12 text-muted mx-auto mb-4" />
       <p class="text-muted">No BPO center data available for the selected date range</p>
     </div>

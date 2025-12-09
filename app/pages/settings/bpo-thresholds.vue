@@ -17,6 +17,7 @@ interface CenterThreshold {
   is_active: boolean
   slack_webhook_url?: string
   slack_channel?: string
+  slack_manager_id?: string
 }
 
 const loading = ref(false)
@@ -92,6 +93,7 @@ const saveCenter = async (center: CenterThreshold) => {
       is_active: center.is_active,
       slack_webhook_url: center.slack_webhook_url,
       slack_channel: center.slack_channel,
+      slack_manager_id: center.slack_manager_id,
       updated_at: new Date().toISOString()
     })
     .eq('id', center.id)
@@ -358,6 +360,11 @@ onMounted(() => {
                       placeholder="#channel"
                       size="sm"
                     />
+                    <UInput
+                      v-model="center.slack_manager_id"
+                      placeholder="Manager Slack ID (U12345678)"
+                      size="sm"
+                    />
                   </div>
                   <div v-else class="flex flex-col items-center gap-1">
                     <UBadge v-if="center.slack_webhook_url" color="primary" variant="subtle" size="xs">
@@ -365,6 +372,7 @@ onMounted(() => {
                     </UBadge>
                     <span v-else class="text-xs text-muted">Not configured</span>
                     <span v-if="center.slack_channel" class="text-xs text-muted">{{ center.slack_channel }}</span>
+                    <span v-if="center.slack_manager_id" class="text-xs text-muted">@{{ center.slack_manager_id }}</span>
                   </div>
                 </td>
                 <td class="px-4 py-3 text-center">
