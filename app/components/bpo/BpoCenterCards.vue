@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { Period, Range } from '~/types'
-import { DateFormatter } from '@internationalized/date'
+import { subDays } from 'date-fns'
+import { getPreviousPeriodRange, formatDateEST, calculatePercentageChange } from '~/utils'
 
 const props = defineProps<{
   period: Period
@@ -41,26 +42,6 @@ interface BpoCenterMetric {
 
 const { fetchAll } = useDailyDealFlow()
 const supabase = useSupabaseClient()
-
-const dateFormatter = new DateFormatter('en-CA', {
-  dateStyle: 'short',
-  timeZone: 'America/New_York'
-})
-
-const formatDateEST = (date: Date): string => {
-  return dateFormatter.format(date)
-}
-
-// Calculate yesterday's date for trend comparison
-const getYesterdayRange = (currentRange: Range): Range => {
-  const dayInMs = 24 * 60 * 60 * 1000
-  const rangeDuration = currentRange.end.getTime() - currentRange.start.getTime()
-  
-  return {
-    start: new Date(currentRange.start.getTime() - rangeDuration - dayInMs),
-    end: new Date(currentRange.start.getTime() - dayInMs)
-  }
-}
 
 const calculatePerformanceScore = (
   metrics: any,
@@ -155,16 +136,17 @@ const { data: centers } = await useAsyncData<BpoCenterMetric[]>(
         return []
       }
       
-      // Fetch yesterday's data for trend calculation
-      const yesterdayRange = getYesterdayRange(props.range)
-      const { data: yesterdayData } = await fetchAll({
-        dateFrom: formatDateEST(yesterdayRange.start),
-        dateTo: formatDateEST(yesterdayRange.end),
+      const previousRange = getPreviousPeriodRange(props.range, subDays)
+      const previousDateFrom = formatDateEST(previousRange.start)
+      const previousDateTo = formatDateEST(previousRange.end)
+      
+      const { data: previousData } = await fetchAll({
+        dateFrom: previousDateFrom,
+        dateTo: previousDateTo,
         limit: 10000,
         offset: 0
       })
       
-      // Group data by lead vendor
       const vendorMap = new Map<string, any>()
       
       currentData.forEach(record => {
@@ -187,7 +169,6 @@ const { data: centers } = await useAsyncData<BpoCenterMetric[]>(
           metrics.pendingApproval++
         }
         
-        // Count DQ statuses
         if (
           record.status === 'Returned To Center - DQ' ||
           record.status === "DQ'd Can't be sold" ||
@@ -197,12 +178,33 @@ const { data: centers } = await useAsyncData<BpoCenterMetric[]>(
         }
       })
       
-      // Calculate yesterday's transfer counts for trend
-      const yesterdayMap = new Map<string, number>()
-      if (yesterdayData) {
-        yesterdayData.forEach(record => {
+      const previousVendorMap = new Map<string, any>()
+      if (previousData) {
+        previousData.forEach(record => {
           const vendor = record.lead_vendor || 'Unknown'
-          yesterdayMap.set(vendor, (yesterdayMap.get(vendor) || 0) + 1)
+          
+          if (!previousVendorMap.has(vendor)) {
+            previousVendorMap.set(vendor, {
+              totalTransfers: 0,
+              pendingApproval: 0,
+              dqCount: 0,
+            })
+          }
+          
+          const metrics = previousVendorMap.get(vendor)!
+          metrics.totalTransfers++
+          
+          if (record.status === 'Pending Approval') {
+            metrics.pendingApproval++
+          }
+          
+          if (
+            record.status === 'Returned To Center - DQ' ||
+            record.status === "DQ'd Can't be sold" ||
+            record.status === 'GI - Currently DQ'
+          ) {
+            metrics.dqCount++
+          }
         })
       }
       
@@ -233,13 +235,16 @@ const { data: centers } = await useAsyncData<BpoCenterMetric[]>(
           ? Math.round((metrics.dqCount / metrics.totalTransfers) * 1000) / 10
           : 0
         
-        // Trend: Compare today's transfers vs yesterday's
-        const yesterdayCount = yesterdayMap.get(vendor) || 0
-        if (yesterdayCount > 0) {
-          metrics.trend = Math.round(((metrics.totalTransfers - yesterdayCount) / yesterdayCount) * 100)
-        } else {
-          metrics.trend = metrics.totalTransfers > 0 ? 100 : 0
+        const previousMetrics = previousVendorMap.get(vendor) || {
+          totalTransfers: 0,
+          pendingApproval: 0,
+          dqCount: 0
         }
+        
+        metrics.trend = calculatePercentageChange(
+          metrics.totalTransfers,
+          previousMetrics.totalTransfers
+        )
         
         // Calculate performance score
         metrics.performanceScore = calculatePerformanceScore(metrics, threshold)
@@ -256,14 +261,14 @@ const { data: centers } = await useAsyncData<BpoCenterMetric[]>(
         // Target progress
         metrics.targetProgress = Math.round((metrics.totalTransfers / threshold.daily_transfer_target) * 100)
         
-        // Assign tier and color
         metrics.tier = threshold.tier
-        metrics.color = {
+        const colorMap: Record<string, string> = {
           'green': 'success',
           'yellow': 'warning',
           'red': 'error',
-          'gray': 'gray'
-        }[metrics.performanceCategory]
+          'gray': 'neutral'
+        }
+        metrics.color = colorMap[metrics.performanceCategory] || 'neutral'
         
         result.push(metrics as BpoCenterMetric)
       })
@@ -586,7 +591,7 @@ const sectionOpen = ref({
           <UIcon name="i-lucide-minus-circle" class="text-gray-500 size-5" />
         </div>
         <h3 class="text-lg font-semibold text-gray-500">Zero Transfer for the Day</h3>
-        <UBadge color="gray" variant="subtle">{{ grayCenters.length }} Centers</UBadge>
+        <UBadge color="neutral" variant="subtle">{{ grayCenters.length }} Centers</UBadge>
         <UIcon 
           :name="sectionOpen.gray ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'" 
           class="ml-auto size-5 text-muted" 
@@ -601,7 +606,7 @@ const sectionOpen = ref({
         >
           <!-- Performance Badge -->
           <div class="absolute top-2 right-2">
-            <UBadge color="gray" variant="solid" size="xs">
+            <UBadge color="neutral" variant="solid" size="xs">
               Score: {{ center.performanceScore }}
             </UBadge>
           </div>
@@ -622,7 +627,7 @@ const sectionOpen = ref({
             <div class="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 border border-gray-100 dark:border-gray-800">
               <p class="text-xs text-muted uppercase mb-1">Transfers</p>
               <p class="text-2xl font-bold text-highlighted">{{ center.totalTransfers }}</p>
-              <UProgress :value="center.targetProgress" color="gray" size="xs" class="mt-2" />
+              <UProgress :value="center.targetProgress" color="neutral" size="xs" class="mt-2" />
               <p class="text-xs text-muted mt-1">{{ center.targetProgress }}% of target</p>
             </div>
 
