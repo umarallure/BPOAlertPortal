@@ -31,6 +31,7 @@ interface CenterMetrics {
   dqRate: number
   approvalRate: number
   lastSaleTime: Date | null
+  underwritingCount: number
 }
 
 const UButton = resolveComponent('UButton')
@@ -46,12 +47,8 @@ const selectedCenters = ref<Set<string>>(new Set())
 const bulkTriggering = ref(false)
 const rowSelection = ref({})
 const columnVisibility = ref()
-// Alert type selection removed from UI — triggers will pick the first available rule by default
 const dateRange = ref<Range>({ start: new Date(), end: new Date() })
-// vendor filter removed per request — alerts page only exposes status/date filters now
 
-// UI-only alert type selector: we'll render options listed by the user
-// (no query behavior yet — you'll provide the queries for each selection later)
 const alertType = ref('all')
 const alertTypeOptions = [
   { label: 'All Centers', value: 'all' },
@@ -63,6 +60,28 @@ const alertTypeOptions = [
   { label: 'Below Threshold Duration', value: 'below_threshold_duration' },
   { label: 'Milestone Achievement', value: 'milestone_achievement' }
 ]
+
+const alertTypeToRuleType: Record<string, string | null> = {
+  all: 'all',
+  high_dq: 'high_dq',
+  low_approval: 'low_approval',
+  low_sales: 'low_sales',
+  underwriting_threshold: 'underwriting_threshold',
+  zero_sales: 'zero_sales',
+  below_threshold_duration: 'below_threshold_duration',
+  milestone_achievement: 'milestone',
+}
+const zeroSalesCheckTime = ref('16:00')
+
+const milestonePercentage = ref(100)
+const milestoneOptions = [
+  { label: '75% of target', value: 75 },
+  { label: '100% of target', value: 100 },
+  { label: '125% of target', value: 125 }
+]
+
+const lowSalesPercentageGap = ref(50)
+const lowSalesZeroHours = ref(2)
 
 const dateFormatter = new DateFormatter('en-US', {
   hour: 'numeric',
@@ -128,7 +147,8 @@ const loadData = async () => {
         totalTransfers: 0,
         dqRate: 0,
         approvalRate: 0,
-        lastSaleTime: null
+        lastSaleTime: null,
+        underwritingCount: 0
       })
     })
 
@@ -155,6 +175,9 @@ const loadData = async () => {
             (i.status && i.status.toLowerCase().includes('dq')) || 
             (i.call_result && i.call_result.toLowerCase().includes('dq'))
           )
+          const underwritingItems = items.filter(i =>
+            i.call_result && i.call_result.toLowerCase().includes('underwriting')
+          )
           const approvals = items.filter(i => 
             i.status && i.status.toLowerCase().includes('sale')
           )
@@ -171,6 +194,7 @@ const loadData = async () => {
           centerMetric.dqRate = total > 0 ? (dqs.length / total) * 100 : 0
           centerMetric.approvalRate = total > 0 ? (approvals.length / total) * 100 : 0
           centerMetric.lastSaleTime = lastSale
+          centerMetric.underwritingCount = underwritingItems.length
         }
       })
     }
@@ -184,15 +208,95 @@ const loadData = async () => {
   }
 }
 
-// Filter metrics based on search only
-// No client-side center search — show all metrics fetched from server
-const filteredMetrics = computed(() => metrics.value)
+// Filter metrics based on alert type and child filters
+const filteredMetrics = computed(() => {
+  const all = metrics.value
+  const now = new Date()
+
+  switch (alertType.value) {
+    case 'high_dq':
+      return all.filter(m =>
+        m.totalTransfers > 0 && m.dqRate > m.center.max_dq_percentage
+      )
+    case 'low_approval':
+      return all.filter(m =>
+        m.totalTransfers > 0 && m.approvalRate < m.center.min_approval_ratio
+      )
+    case 'low_sales': {
+      // Low sales: sales < target by X% OR 0 sales in Y hours
+      const percentageGap = lowSalesPercentageGap.value
+      const zeroHours = lowSalesZeroHours.value
+      
+      return all.filter(m => {
+        const targetWithGap = m.center.daily_sales_target * (percentageGap / 100)
+        const belowGap = m.salesCount < targetWithGap
+        
+        // Check if 0 sales in last Y hours
+        let zeroSalesInWindow = false
+        if (m.lastSaleTime) {
+          const hoursSinceLastSale = (now.getTime() - m.lastSaleTime.getTime()) / (1000 * 60 * 60)
+          zeroSalesInWindow = hoursSinceLastSale >= zeroHours
+        } else {
+          // No sales at all today
+          zeroSalesInWindow = true
+        }
+        
+        return belowGap || zeroSalesInWindow
+      })
+    }
+    case 'underwriting_threshold':
+      return all.filter(m =>
+        m.underwritingCount > m.center.underwriting_threshold
+      )
+    case 'zero_sales': {
+      // Zero sales: check if 0 sales by specific time
+      const [checkHour, checkMinute] = zeroSalesCheckTime.value.split(':').map(Number)
+      const checkTime = new Date()
+      checkTime.setHours(checkHour, checkMinute, 0, 0)
+      
+      // Only show if current time is past check time and sales = 0
+      const isPastCheckTime = now >= checkTime
+      
+      return all.filter(m =>
+        m.salesCount === 0 && isPastCheckTime
+      )
+    }
+    case 'below_threshold_duration':
+      return all.filter(m =>
+        m.salesCount < m.center.daily_sales_target ||
+        (m.totalTransfers > 0 && (
+          m.dqRate > m.center.max_dq_percentage ||
+          m.approvalRate < m.center.min_approval_ratio
+        ))
+      )
+    case 'milestone_achievement': {
+      // Milestone: centers that reached X% of target
+      const milestonePercent = milestonePercentage.value
+      
+      return all.filter(m => {
+        const targetForMilestone = m.center.daily_sales_target * (milestonePercent / 100)
+        const reachedMilestone = m.salesCount >= targetForMilestone
+        const meetsQuality = m.totalTransfers === 0 || (
+          m.dqRate <= m.center.max_dq_percentage &&
+          m.approvalRate >= m.center.min_approval_ratio
+        )
+        
+        return reachedMilestone && meetsQuality
+      })
+    }
+    default:
+      return all
+  }
+})
 
 // rules is used directly for the alert dropdown (no custom UI filtering)
 
 const triggerAlert = async (centerId: string) => {
-  // Use the first available active rule as default when no UI selector
-  const rule = rules.value[0]
+  // Pick the rule that matches the currently selected alert type
+  const ruleType = alertTypeToRuleType[alertType.value] ?? null
+  const rule = ruleType
+    ? rules.value.find(r => r.rule_type === ruleType)
+    : rules.value[0]
   if (!rule) {
     toast.add({ title: 'Error', description: 'No alert rules configured', color: 'red' })
     return
@@ -202,7 +306,7 @@ const triggerAlert = async (centerId: string) => {
   try {
     const session = (await supabase.auth.getSession()).data.session
 
-    await $fetch('https://gqhcjqxcvhgwsqfqgekh.supabase.co/functions/v1/check-alerts', {
+    const res: any = await $fetch('https://gqhcjqxcvhgwsqfqgekh.supabase.co/functions/v1/check-alerts', {
       method: 'POST',
       body: {
         center_id: centerId,
@@ -214,7 +318,37 @@ const triggerAlert = async (centerId: string) => {
       }
     })
 
-    toast.add({ title: 'Alert Triggered', description: 'Notification sent to Slack', color: 'green' })
+    const outcome = Array.isArray(res?.results) ? res.results[0] : null
+    console.log('[alerts] triggerAlert outcome', outcome)
+
+    if (!outcome) {
+      toast.add({
+        title: 'No notification sent',
+        description: 'Alert service did not return any result for this trigger.',
+        color: 'yellow'
+      })
+      return
+    }
+
+    if (outcome.status === 'sent' || !outcome.status) {
+      toast.add({
+        title: 'Notification sent',
+        description: outcome.message || `Slack alert sent for ${outcome.center} (${outcome.rule}).`,
+        color: 'green'
+      })
+    } else if (outcome.status === 'skipped') {
+      toast.add({
+        title: 'No notification sent',
+        description: outcome.message || 'Rule conditions were not met for this center.',
+        color: 'yellow'
+      })
+    } else {
+      toast.add({
+        title: 'Error sending notification',
+        description: outcome.message || 'An error occurred while sending the alert.',
+        color: 'red'
+      })
+    }
   } catch (e: any) {
     toast.add({ title: 'Error triggering alert', description: e.message, color: 'red' })
   } finally {
@@ -229,13 +363,16 @@ const triggerBulkAlerts = async () => {
   try {
     const session = (await supabase.auth.getSession()).data.session
     const centerIds = Array.from(selectedCenters.value)
-    const rule = rules.value[0]
+    const ruleType = alertTypeToRuleType[alertType.value] ?? null
+    const rule = ruleType
+      ? rules.value.find(r => r.rule_type === ruleType)
+      : rules.value[0]
     if (!rule) {
       toast.add({ title: 'Error', description: 'No alert rules configured', color: 'red' })
       return
     }
-    
-    await $fetch('https://gqhcjqxcvhgwsqfqgekh.supabase.co/functions/v1/bulk-alerts', {
+
+    const res: any = await $fetch('https://gqhcjqxcvhgwsqfqgekh.supabase.co/functions/v1/bulk-alerts', {
       method: 'POST',
       body: {
         center_ids: centerIds,
@@ -247,13 +384,54 @@ const triggerBulkAlerts = async () => {
       }
     })
 
-    toast.add({ 
-      title: 'Bulk Alerts Triggered', 
-      description: `Notifications sent to ${centerIds.length} centers`, 
-      color: 'green' 
-    })
-    
-    // Clear selection after successful trigger
+    console.log('[alerts] triggerBulkAlerts outcome', res)
+
+    const totalSelected = centerIds.length
+    const summary = res?.summary || {}
+    const successful = typeof summary.successful === 'number'
+      ? summary.successful
+      : Array.isArray(res?.results) ? res.results.length : 0
+    const failed = typeof summary.failed === 'number'
+      ? summary.failed
+      : Array.isArray(res?.errors) ? res.errors.length : 0
+    const skipped = Math.max(totalSelected - successful - failed, 0)
+
+    if (!res || (!successful && !failed && !skipped)) {
+      toast.add({
+        title: 'No notifications processed',
+        description: 'Alert service did not return any results for this bulk trigger.',
+        color: 'yellow'
+      })
+    } else if (successful > 0 && failed === 0 && skipped === 0) {
+      toast.add({
+        title: 'Notifications sent',
+        description: `Slack alerts sent for ${successful} center${successful === 1 ? '' : 's'}.`,
+        color: 'green'
+      })
+    } else if (successful > 0) {
+      const parts: string[] = []
+      parts.push(`${successful} sent`)
+      if (skipped > 0) parts.push(`${skipped} skipped (conditions not met)`)
+      if (failed > 0) parts.push(`${failed} failed`)
+
+      toast.add({
+        title: 'Bulk alerts partially sent',
+        description: parts.join(', '),
+        color: 'yellow'
+      })
+    } else {
+      const parts: string[] = []
+      if (skipped > 0) parts.push(`${skipped} skipped (conditions not met)`)
+      if (failed > 0) parts.push(`${failed} failed`)
+
+      toast.add({
+        title: 'No notifications sent',
+        description: parts.length > 0 ? parts.join(', ') : 'No centers met alert conditions.',
+        color: failed > 0 ? 'red' : 'yellow'
+      })
+    }
+
+    // Clear selection after completion
     selectedCenters.value.clear()
     rowSelection.value = {}
   } catch (e: any) {
@@ -490,7 +668,7 @@ onMounted(() => {
           <!-- Date Range -->
           <HomeDateRangePicker v-model="dateRange" />
 
-          <!-- UI-only Alert Type dropdown — selection does not apply filters until you provide the queries -->
+          <!-- Alert Type dropdown -->
           <USelect
             v-model="alertType"
             :items="alertTypeOptions"
@@ -498,17 +676,69 @@ onMounted(() => {
             placeholder="Alert Type"
             class="min-w-64"
           />
-          <!-- Removed center search and vendor/agent/carrier/call-result filters per request -->
-          
-          <!-- Alert type UI removed — triggers will use the first active rule by default -->
+
+          <!-- Child filters based on alert type -->
+          <!-- Zero Sales: Time picker -->
+          <div v-if="alertType === 'zero_sales'" class="flex items-center gap-2">
+            <label class="text-sm text-gray-600 dark:text-gray-400">Check Time:</label>
+            <input
+              v-model="zeroSalesCheckTime"
+              type="time"
+              class="px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md bg-white dark:bg-gray-800 text-sm"
+            />
+          </div>
+
+          <!-- Low Sales: Percentage gap and hours -->
+          <div v-if="alertType === 'low_sales'" class="flex items-center gap-3">
+            <div class="flex items-center gap-2">
+              <label class="text-sm text-gray-600 dark:text-gray-400">Gap %:</label>
+              <input
+                v-model.number="lowSalesPercentageGap"
+                type="number"
+                min="0"
+                max="100"
+                class="w-20 px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md bg-white dark:bg-gray-800 text-sm"
+              />
+            </div>
+            <div class="flex items-center gap-2">
+              <label class="text-sm text-gray-600 dark:text-gray-400">Zero Hours:</label>
+              <input
+                v-model.number="lowSalesZeroHours"
+                type="number"
+                min="0"
+                max="24"
+                class="w-20 px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md bg-white dark:bg-gray-800 text-sm"
+              />
+            </div>
+          </div>
+
+          <!-- Milestone: preset selector + custom percentage input -->
+          <div v-if="alertType === 'milestone_achievement'" class="flex items-center gap-3">
+            <label class="text-sm text-gray-600 dark:text-gray-400">Milestone:</label>
+            <USelect
+              v-model="milestonePercentage"
+              :items="milestoneOptions"
+              class="min-w-40"
+            />
+            <div class="flex items-center gap-1">
+              <input
+                v-model.number="milestonePercentage"
+                type="number"
+                min="0"
+                max="200"
+                class="w-20 px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md bg-white dark:bg-gray-800 text-sm"
+              >
+              <span class="text-xs text-gray-500 dark:text-gray-400">% of target</span>
+            </div>
+          </div>
         </div>
-        
+
         <div class="flex items-center gap-2">
           <span class="text-sm text-gray-600 dark:text-gray-400">
-            {{ Array.from(rowSelection).filter(([_, selected]) => selected).length }} selected
+            {{ selectedCenters.size }} selected
           </span>
           <UButton
-            v-if="Array.from(rowSelection).filter(([_, selected]) => selected).length > 0"
+            v-if="selectedCenters.size > 0"
             color="red"
             variant="ghost"
             size="sm"
@@ -526,12 +756,12 @@ onMounted(() => {
           </UButton>
           <UButton
             :loading="bulkTriggering"
-            :disabled="Array.from(rowSelection).filter(([_, selected]) => selected).length === 0"
+            :disabled="selectedCenters.size === 0"
             color="primary"
             size="sm"
             @click="triggerBulkAlerts"
           >
-            Send Bulk Alerts ({{ Array.from(rowSelection).filter(([_, selected]) => selected).length }})
+            Send Bulk Alerts ({{ selectedCenters.size }})
           </UButton>
         </div>
       </div>
