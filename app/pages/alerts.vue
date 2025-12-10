@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { DateFormatter } from '@internationalized/date'
 import HomeDateRangePicker from '~/components/home/HomeDateRangePicker.vue'
-import type { Range } from '~/types'
-import type { AlertRule } from '~/types'
+import type { Range, AlertRule } from '~/types'
 import type { TableColumn } from '@nuxt/ui'
 import type { Row } from '@tanstack/table-core'
 
@@ -46,7 +45,6 @@ const metrics = ref<CenterMetrics[]>([])
 const selectedCenters = ref<Set<string>>(new Set())
 const bulkTriggering = ref(false)
 const rowSelection = ref({})
-const columnVisibility = ref()
 const dateRange = ref<Range>({ start: new Date(), end: new Date() })
 
 const alertType = ref('all')
@@ -82,6 +80,7 @@ const milestoneOptions = [
 
 const lowSalesPercentageGap = ref(50)
 const lowSalesZeroHours = ref(2)
+const belowThresholdHours = ref(4)
 
 const dateFormatter = new DateFormatter('en-US', {
   hour: 'numeric',
@@ -113,6 +112,13 @@ const loadData = async () => {
 
     if (rulesData) {
       rules.value = rulesData
+
+      // Initialize below-threshold duration hours from rule condition settings when available
+      const belowRule = rulesData.find(r => r.rule_type === 'below_threshold_duration') as any
+      const consecutive = belowRule?.condition_settings?.consecutive_hours
+      if (typeof consecutive === 'number' && !Number.isNaN(consecutive) && consecutive > 0) {
+        belowThresholdHours.value = consecutive
+      }
     }
 
     // 3. Fetch Today's Stats
@@ -261,14 +267,26 @@ const filteredMetrics = computed(() => {
         m.salesCount === 0 && isPastCheckTime
       )
     }
-    case 'below_threshold_duration':
-      return all.filter(m =>
-        m.salesCount < m.center.daily_sales_target ||
-        (m.totalTransfers > 0 && (
-          m.dqRate > m.center.max_dq_percentage ||
-          m.approvalRate < m.center.min_approval_ratio
-        ))
-      )
+    case 'below_threshold_duration': {
+      const hoursThreshold = belowThresholdHours.value
+
+      return all.filter(m => {
+        const belowTarget = m.salesCount < m.center.daily_sales_target
+        if (!belowTarget) return false
+
+        let hoursBelow = 0
+        if (m.lastSaleTime) {
+          hoursBelow = (now.getTime() - m.lastSaleTime.getTime()) / (1000 * 60 * 60)
+        } else {
+          const startOfDay = new Date(now)
+          startOfDay.setHours(9, 0, 0, 0)
+          if (now > startOfDay) {
+            hoursBelow = (now.getTime() - startOfDay.getTime()) / (1000 * 60 * 60)
+          }
+        }
+        return hoursBelow >= hoursThreshold
+      })
+    }
     case 'milestone_achievement': {
       // Milestone: centers that reached X% of target
       const milestonePercent = milestonePercentage.value
@@ -710,6 +728,18 @@ onMounted(() => {
                 class="w-20 px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md bg-white dark:bg-gray-800 text-sm"
               />
             </div>
+          </div>
+
+          <!-- Below Threshold Duration: consecutive hours below target -->
+          <div v-if="alertType === 'below_threshold_duration'" class="flex items-center gap-2">
+            <label class="text-sm text-gray-600 dark:text-gray-400">Consecutive hours below target:</label>
+            <input
+              v-model.number="belowThresholdHours"
+              type="number"
+              min="1"
+              max="24"
+              class="w-20 px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md bg-white dark:bg-gray-800 text-sm"
+            />
           </div>
 
           <!-- Milestone: preset selector + custom percentage input -->
