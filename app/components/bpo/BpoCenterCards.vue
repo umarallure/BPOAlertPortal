@@ -58,11 +58,10 @@ const calculatePerformanceScore = (
     ? 100
     : Math.max(0, 100 - ((metrics.dqRate - threshold.max_dq_percentage) * 5))
 
-  // Weighted total
   const totalScore = (
-    (transferScore * threshold.transfer_weight / 100) +
-    (approvalScore * threshold.approval_ratio_weight / 100) +
-    (dqScore * threshold.dq_weight / 100)
+    (approvalScore * 0.40) +
+    (transferScore * 0.40) +
+    (dqScore * 0.20)
   )
 
   return Math.round(totalScore * 10) / 10

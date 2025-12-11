@@ -11,12 +11,14 @@ const open = defineModel<boolean>('open')
 
 const state = ref<Partial<AlertRule>>({
   rule_name: '',
+  rule_type: '',
   description: '',
   alert_message_template: '',
   condition_settings: {},
   is_active: true,
   channels: [],
-  recipients: []
+  recipients: [],
+  priority: 'medium'
 })
 
 watch(() => props.rule, (newRule) => {
@@ -25,12 +27,14 @@ watch(() => props.rule, (newRule) => {
   } else {
     state.value = {
       rule_name: '',
+      rule_type: '',
       description: '',
       alert_message_template: '',
       condition_settings: {},
       is_active: true,
       channels: [],
-      recipients: []
+      recipients: [],
+      priority: 'medium'
     }
   }
 }, { immediate: true })
@@ -60,6 +64,23 @@ const onSave = () => {
       <div class="space-y-4">
         <UFormField label="Rule Name">
           <UInput v-model="state.rule_name" class="w-full" />
+        </UFormField>
+
+        <UFormField label="Rule Type" help="e.g., low_sales, milestone_achievement, sales_alert, etc.">
+          <UInput v-model="state.rule_type" class="w-full" placeholder="low_sales" />
+        </UFormField>
+
+        <UFormField label="Priority">
+          <USelect
+            v-model="state.priority"
+            :options="[
+              { label: 'Critical', value: 'critical' },
+              { label: 'High', value: 'high' },
+              { label: 'Medium', value: 'medium' },
+              { label: 'Low', value: 'low' }
+            ]"
+            class="w-full"
+          />
         </UFormField>
 
         <UFormField label="Description">

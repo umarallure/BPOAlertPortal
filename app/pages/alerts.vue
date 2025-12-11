@@ -56,7 +56,8 @@ const alertTypeOptions = [
   { label: 'Underwriting threshold', value: 'underwriting_threshold' },
   { label: 'Zero sales for the day', value: 'zero_sales' },
   { label: 'Below Threshold Duration', value: 'below_threshold_duration' },
-  { label: 'Milestone Achievement', value: 'milestone_achievement' }
+  { label: 'Milestone Achievement', value: 'milestone_achievement' },
+  { label: 'Sales Alert', value: 'sales_alert' }
 ]
 
 const alertTypeToRuleType: Record<string, string | null> = {
@@ -68,6 +69,7 @@ const alertTypeToRuleType: Record<string, string | null> = {
   zero_sales: 'zero_sales',
   below_threshold_duration: 'below_threshold_duration',
   milestone_achievement: 'milestone',
+  sales_alert: 'sales_alert',
 }
 const zeroSalesCheckTime = ref('16:00')
 
@@ -81,6 +83,8 @@ const milestoneOptions = [
 const lowSalesPercentageGap = ref(50)
 const lowSalesZeroHours = ref(2)
 const belowThresholdHours = ref(4)
+const progressUpdateMinHours = ref(2)
+const progressUpdateMaxHours = ref(6)
 
 const dateFormatter = new DateFormatter('en-US', {
   hour: 'numeric',
@@ -219,89 +223,208 @@ const filteredMetrics = computed(() => {
   const all = metrics.value
   const now = new Date()
 
+  const isHighDq = (m: CenterMetrics) =>
+    m.totalTransfers > 0 && m.dqRate > m.center.max_dq_percentage
+
+  const isLowApproval = (m: CenterMetrics) =>
+    m.totalTransfers > 0 && m.approvalRate < m.center.min_approval_ratio
+
+  const isLowSales = (m: CenterMetrics) => {
+    // Low sales: sales < target by X% OR 0 sales in Y hours
+    const percentageGap = lowSalesPercentageGap.value
+    const zeroHours = lowSalesZeroHours.value
+
+    // Calculate actual percentage: (sales / target) * 100
+    const calculatedPercent = m.center.daily_sales_target > 0 
+      ? (m.salesCount / m.center.daily_sales_target) * 100 
+      : 0
+    
+    // Check if sales are below the gap percentage threshold
+    const belowGap = calculatedPercent < percentageGap
+
+    // Check if 0 sales in last Y hours
+    let zeroSalesInWindow = false
+    if (m.lastSaleTime) {
+      // Has sales: check hours since last sale
+      const hoursSinceLastSale = (now.getTime() - m.lastSaleTime.getTime()) / (1000 * 60 * 60)
+      zeroSalesInWindow = hoursSinceLastSale >= zeroHours
+    } else {
+      // No sales at all: check if enough hours have passed from start of day
+      const startOfDay = new Date(now)
+      startOfDay.setHours(9, 0, 0, 0) // Assuming business day starts at 9 AM
+      if (now > startOfDay) {
+        const hoursSinceStartOfDay = (now.getTime() - startOfDay.getTime()) / (1000 * 60 * 60)
+        zeroSalesInWindow = hoursSinceStartOfDay >= zeroHours
+      } else {
+        // Before start of day, don't show as zero sales
+        zeroSalesInWindow = false
+      }
+    }
+
+    return belowGap || zeroSalesInWindow
+  }
+
+  const isUnderwritingThreshold = (m: CenterMetrics) =>
+    m.underwritingCount > m.center.underwriting_threshold
+
+  const isZeroSales = (m: CenterMetrics) => {
+    return m.salesCount === 0
+  }
+
+  const isBelowThresholdDuration = (m: CenterMetrics) => {
+    const hoursThreshold = belowThresholdHours.value || 0
+
+    const belowTarget = m.salesCount < m.center.daily_sales_target
+    if (!belowTarget) return false
+
+    if (hoursThreshold <= 0) return true
+
+    let hoursBelow = 0
+    if (m.lastSaleTime) {
+      const timeDiff = now.getTime() - m.lastSaleTime.getTime()
+      hoursBelow = Math.max(0, timeDiff / (1000 * 60 * 60))
+    } else {
+      const startOfDay = new Date(now)
+      startOfDay.setHours(9, 0, 0, 0)
+      startOfDay.setMinutes(0, 0)
+      startOfDay.setSeconds(0, 0)
+      startOfDay.setMilliseconds(0)
+      
+      if (now.getTime() >= startOfDay.getTime()) {
+        const timeDiff = now.getTime() - startOfDay.getTime()
+        hoursBelow = Math.max(0, timeDiff / (1000 * 60 * 60))
+      } else {
+        hoursBelow = 0
+      }
+    }
+
+    return hoursBelow >= hoursThreshold
+  }
+
+  const isMilestoneAchievement = (m: CenterMetrics) => {
+    // Milestone: centers that reached X% of target
+    const milestonePercent = milestonePercentage.value
+
+    // Calculate actual percentage: (sales / target) * 100
+    const calculatedPercent = m.center.daily_sales_target > 0 
+      ? (m.salesCount / m.center.daily_sales_target) * 100 
+      : 0
+    
+    // Check if calculated percentage meets or exceeds the milestone threshold
+    // Show centers that meet the milestone regardless of quality metrics
+    return calculatedPercent >= milestonePercent
+  }
+
+  const isProgressUpdate = (m: CenterMetrics) => {
+    // Progress Update: centers with sales > 0 and hours remaining within range
+    // This is a positive/encouraging alert for centers making progress
+    const minHours = progressUpdateMinHours.value
+    const maxHours = progressUpdateMaxHours.value
+    const currentHour = now.getHours()
+    
+    // Calculate hours remaining (assuming business day ends at 6 PM / 18:00)
+    const hoursRemaining = Math.max(0, 18 - currentHour)
+    
+    // Must have at least some sales (progress made)
+    const hasSales = m.salesCount > 0
+    
+    // Hours remaining must be within the specified range
+    const hoursInRange = hoursRemaining >= minHours && hoursRemaining <= maxHours
+    
+    // Optional: Only show if not already at 100%+ of target (to keep it encouraging, not congratulatory)
+    const calculatedPercent = m.center.daily_sales_target > 0 
+      ? (m.salesCount / m.center.daily_sales_target) * 100 
+      : 0
+    const notComplete = calculatedPercent < 100
+    
+    return hasSales && hoursInRange && notComplete
+  }
+
+  const isSalesAlert = (m: CenterMetrics) => {
+    // Sales Alert: centers with sales > 0, hours remaining > 0, and not at 100% target
+    // This is an encouraging alert: "X hrs left & Y sales in — awesome start, let's finish strong!"
+    const currentHour = now.getHours()
+    
+    // Calculate hours remaining (assuming business day ends at 6 PM / 18:00)
+    const hoursRemaining = Math.max(0, 18 - currentHour)
+    
+    // Must have at least some sales (progress made)
+    const hasSales = m.salesCount > 0
+    
+    // Must have hours remaining in the day
+    const hasTimeRemaining = hoursRemaining > 0
+    
+    // Only show if not already at 100%+ of target (to keep it encouraging, not congratulatory)
+    const calculatedPercent = m.center.daily_sales_target > 0 
+      ? (m.salesCount / m.center.daily_sales_target) * 100 
+      : 0
+    const notComplete = calculatedPercent < 100
+    
+    return hasSales && hasTimeRemaining && notComplete
+  }
+
   switch (alertType.value) {
+    case 'all':
+      // Show only centers that meet at least one alert condition
+      return all.filter(m =>
+        isHighDq(m)
+        || isLowApproval(m)
+        || isLowSales(m)
+        || isUnderwritingThreshold(m)
+        || isZeroSales(m)
+        || isBelowThresholdDuration(m)
+        || isMilestoneAchievement(m)
+        || isSalesAlert(m)
+      )
     case 'high_dq':
-      return all.filter(m =>
-        m.totalTransfers > 0 && m.dqRate > m.center.max_dq_percentage
-      )
+      return all.filter(isHighDq)
     case 'low_approval':
-      return all.filter(m =>
-        m.totalTransfers > 0 && m.approvalRate < m.center.min_approval_ratio
-      )
-    case 'low_sales': {
-      // Low sales: sales < target by X% OR 0 sales in Y hours
-      const percentageGap = lowSalesPercentageGap.value
-      const zeroHours = lowSalesZeroHours.value
-      
-      return all.filter(m => {
-        const targetWithGap = m.center.daily_sales_target * (percentageGap / 100)
-        const belowGap = m.salesCount < targetWithGap
-        
-        // Check if 0 sales in last Y hours
-        let zeroSalesInWindow = false
-        if (m.lastSaleTime) {
-          const hoursSinceLastSale = (now.getTime() - m.lastSaleTime.getTime()) / (1000 * 60 * 60)
-          zeroSalesInWindow = hoursSinceLastSale >= zeroHours
-        } else {
-          // No sales at all today
-          zeroSalesInWindow = true
-        }
-        
-        return belowGap || zeroSalesInWindow
-      })
-    }
+      return all.filter(isLowApproval)
+    case 'low_sales':
+      return all.filter(isLowSales)
+    //konsy carrier ka threshhold reach ho gya hy
     case 'underwriting_threshold':
-      return all.filter(m =>
-        m.underwritingCount > m.center.underwriting_threshold
-      )
-    case 'zero_sales': {
-      // Zero sales: check if 0 sales by specific time
-      const [checkHour, checkMinute] = zeroSalesCheckTime.value.split(':').map(Number)
-      const checkTime = new Date()
-      checkTime.setHours(checkHour, checkMinute, 0, 0)
-      
-      // Only show if current time is past check time and sales = 0
-      const isPastCheckTime = now >= checkTime
-      
-      return all.filter(m =>
-        m.salesCount === 0 && isPastCheckTime
-      )
-    }
-    case 'below_threshold_duration': {
-      const hoursThreshold = belowThresholdHours.value
-
-      return all.filter(m => {
-        const belowTarget = m.salesCount < m.center.daily_sales_target
-        if (!belowTarget) return false
-
-        let hoursBelow = 0
-        if (m.lastSaleTime) {
-          hoursBelow = (now.getTime() - m.lastSaleTime.getTime()) / (1000 * 60 * 60)
-        } else {
-          const startOfDay = new Date(now)
-          startOfDay.setHours(9, 0, 0, 0)
-          if (now > startOfDay) {
-            hoursBelow = (now.getTime() - startOfDay.getTime()) / (1000 * 60 * 60)
-          }
-        }
-        return hoursBelow >= hoursThreshold
-      })
-    }
+      return all.filter(isUnderwritingThreshold)
+    case 'zero_sales':
+      return all.filter(isZeroSales)
+    case 'below_threshold_duration':
+      return all.filter(isBelowThresholdDuration)
     case 'milestone_achievement': {
-      // Milestone: centers that reached X% of target
       const milestonePercent = milestonePercentage.value
-      
-      return all.filter(m => {
-        const targetForMilestone = m.center.daily_sales_target * (milestonePercent / 100)
-        const reachedMilestone = m.salesCount >= targetForMilestone
+
+      // Debug logging for milestone filter
+      const debugData = all.map(m => {
+        const target = m.center.daily_sales_target
+        const currentSales = m.salesCount
+        // Calculate actual percentage: (sales / target) * 100
+        const calculatedPercent = target > 0 ? (currentSales / target) * 100 : 0
         const meetsQuality = m.totalTransfers === 0 || (
           m.dqRate <= m.center.max_dq_percentage &&
           m.approvalRate >= m.center.min_approval_ratio
         )
-        
-        return reachedMilestone && meetsQuality
+
+        return {
+          center: m.center.center_name,
+          sales: currentSales,
+          target,
+          calculatedPercent: Number(calculatedPercent.toFixed(2)),
+          filterMilestonePercent: milestonePercent,
+          dqRate: Number(m.dqRate.toFixed(1)),
+          approvalRate: Number(m.approvalRate.toFixed(1)),
+          maxDq: m.center.max_dq_percentage,
+          minApproval: m.center.min_approval_ratio,
+          meetsMilestone: calculatedPercent >= milestonePercent,
+          meetsQuality
+        }
       })
+
+      console.log('[alerts] milestone_achievement debug', debugData)
+
+      return all.filter(isMilestoneAchievement)
     }
+    case 'sales_alert':
+      // Show all centers - filtering is only for alert sending, not for display
+      return all
     default:
       return all
   }
@@ -320,6 +443,63 @@ const triggerAlert = async (centerId: string) => {
     return
   }
 
+  // Get the center metrics for the current center
+  const centerMetric = metrics.value.find(m => m.center.id === centerId)
+  
+  // Prepare filter values to send to backend
+  const filterValues: any = {}
+  if (alertType.value === 'low_sales') {
+    filterValues.percentage_gap = lowSalesPercentageGap.value
+    filterValues.zero_sales_hours = lowSalesZeroHours.value
+    if (centerMetric) {
+      filterValues.current_sales = centerMetric.salesCount
+      filterValues.target_sales = centerMetric.center.daily_sales_target
+      filterValues.last_sale_time = centerMetric.lastSaleTime?.toISOString() || null
+    }
+  } else if (alertType.value === 'milestone_achievement') {
+    filterValues.milestone_percentage = milestonePercentage.value
+    if (centerMetric) {
+      filterValues.current_sales = centerMetric.salesCount
+      filterValues.target_sales = centerMetric.center.daily_sales_target
+    }
+  } else if (alertType.value === 'sales_alert') {
+    if (centerMetric) {
+      const now = new Date()
+      
+      const formatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/New_York',
+        hour: 'numeric',
+        minute: 'numeric',
+        hour12: false
+      })
+      
+      const usTimeParts = formatter.formatToParts(now)
+      const currentHour = parseInt(usTimeParts.find(p => p.type === 'hour')?.value || '0')
+      const currentMinute = parseInt(usTimeParts.find(p => p.type === 'minute')?.value || '0')
+      
+      let hoursRemaining = 0
+      
+      if (currentHour >= 9 && currentHour < 19) {
+        hoursRemaining = 19 - currentHour - (currentMinute / 60)
+      } else if (currentHour < 9) {
+        hoursRemaining = 19 - currentHour - (currentMinute / 60)
+      } else {
+        const minutesUntilMidnight = (60 - currentMinute) / 60
+        const hoursUntilMidnight = 24 - currentHour - 1
+        hoursRemaining = minutesUntilMidnight + hoursUntilMidnight + 19
+      }
+      
+      hoursRemaining = Math.floor(Math.max(0, hoursRemaining))
+      
+      filterValues.current_sales = centerMetric.salesCount
+      filterValues.hours_remaining = hoursRemaining
+      
+      if (rule && rule.condition_settings) {
+        filterValues.condition_settings = rule.condition_settings
+      }
+    }
+  }
+
   triggering.value = centerId
   try {
     const session = (await supabase.auth.getSession()).data.session
@@ -329,7 +509,8 @@ const triggerAlert = async (centerId: string) => {
       body: {
         center_id: centerId,
         rule_id: rule.id,
-        force: true
+        force: true,
+        filter_values: filterValues
       },
       headers: {
         'Authorization': `Bearer ${session?.access_token}`
@@ -390,12 +571,55 @@ const triggerBulkAlerts = async () => {
       return
     }
 
+    // Prepare filter values to send to backend
+    const filterValues: any = {}
+    if (alertType.value === 'low_sales') {
+      filterValues.percentage_gap = lowSalesPercentageGap.value
+      filterValues.zero_sales_hours = lowSalesZeroHours.value
+    } else if (alertType.value === 'milestone_achievement') {
+      filterValues.milestone_percentage = milestonePercentage.value
+    } else if (alertType.value === 'sales_alert') {
+      const now = new Date()
+      
+      const formatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/New_York',
+        hour: 'numeric',
+        minute: 'numeric',
+        hour12: false
+      })
+      
+      const usTimeParts = formatter.formatToParts(now)
+      const currentHour = parseInt(usTimeParts.find(p => p.type === 'hour')?.value || '0')
+      const currentMinute = parseInt(usTimeParts.find(p => p.type === 'minute')?.value || '0')
+      
+      let hoursRemaining = 0
+      
+      if (currentHour >= 9 && currentHour < 19) {
+        hoursRemaining = 19 - currentHour - (currentMinute / 60)
+      } else if (currentHour < 9) {
+        hoursRemaining = 19 - currentHour - (currentMinute / 60)
+      } else {
+        const minutesUntilMidnight = (60 - currentMinute) / 60
+        const hoursUntilMidnight = 24 - currentHour - 1
+        hoursRemaining = minutesUntilMidnight + hoursUntilMidnight + 19
+      }
+      
+      hoursRemaining = Math.floor(Math.max(0, hoursRemaining))
+      
+      filterValues.hours_remaining = hoursRemaining
+      
+      if (rule && rule.condition_settings) {
+        filterValues.condition_settings = rule.condition_settings
+      }
+    }
+
     const res: any = await $fetch('https://gqhcjqxcvhgwsqfqgekh.supabase.co/functions/v1/bulk-alerts', {
       method: 'POST',
       body: {
         center_ids: centerIds,
         rule_id: rule.id,
-        force: true
+        force: true,
+        filter_values: filterValues
       },
       headers: {
         'Authorization': `Bearer ${session?.access_token}`
@@ -748,6 +972,8 @@ onMounted(() => {
             <USelect
               v-model="milestonePercentage"
               :items="milestoneOptions"
+              option-attribute="label"
+              value-attribute="value"
               class="min-w-40"
             />
             <div class="flex items-center gap-1">
