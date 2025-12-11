@@ -43,28 +43,15 @@ interface BpoCenterMetric {
 const { fetchAll } = useDailyDealFlow()
 const supabase = useSupabaseClient()
 
-const calculatePerformanceScore = (
-  metrics: any,
-  threshold: CenterThreshold
+const calculateRawScore = (
+  metrics: any
 ): number => {
-  // Transfer achievement (0-100)
-  const transferScore = Math.min(100, (metrics.totalTransfers / threshold.daily_transfer_target) * 100)
-
-  // Approval ratio score (0-100)
-  const approvalScore = Math.min(100, (metrics.approvalRatio / threshold.min_approval_ratio) * 100)
-
-  // DQ score (inverted - lower is better) (0-100)
-  const dqScore = metrics.dqRate <= threshold.max_dq_percentage
-    ? 100
-    : Math.max(0, 100 - ((metrics.dqRate - threshold.max_dq_percentage) * 5))
-
-  const totalScore = (
-    (approvalScore * 0.40) +
-    (transferScore * 0.40) +
-    (dqScore * 0.20)
-  )
-
-  return Math.round(totalScore * 10) / 10
+  const submitted = metrics.pendingApproval || 0
+  const transfers = metrics.totalTransfers || 0
+  const dq = metrics.dqCount || 0
+  
+  const rawScore = (submitted * 3) + (transfers * 1) - (dq * 2)
+  return rawScore
 }
 
 const getPerformanceCategory = (
@@ -74,29 +61,18 @@ const getPerformanceCategory = (
   threshold: CenterThreshold,
   totalTransfers: number
 ): 'green' | 'yellow' | 'red' | 'gray' => {
-  // Gray: Zero transfers
   if (totalTransfers === 0) {
     return 'gray'
   }
 
-  // Green: High score (≥80) AND meets approval & DQ thresholds
-  if (
-    score >= 80 &&
-    approvalRatio >= threshold.min_approval_ratio &&
-    dqRate <= threshold.max_dq_percentage
-  ) {
+  if (score >= 80) {
     return 'green'
   }
 
-  // Red: Low score (<60) OR fails both approval & DQ thresholds
-  if (
-    score < 60 ||
-    (approvalRatio < threshold.min_approval_ratio && dqRate > threshold.max_dq_percentage)
-  ) {
+  if (score < 60) {
     return 'red'
   }
 
-  // Yellow: Everything else
   return 'yellow'
 }
 
@@ -209,12 +185,35 @@ const { data: centers } = await useAsyncData<BpoCenterMetric[]>(
 
       // Calculate metrics and scores
       const result: BpoCenterMetric[] = []
+      const rawScores: number[] = []
 
-      // Iterate over all active thresholds to ensure even centers with 0 transfers are shown
+      // First pass: calculate all raw scores
       thresholdMap.forEach((threshold, vendor) => {
         let metrics = vendorMap.get(vendor)
 
-        // If no metrics found (0 transfers), create default zero-metrics object
+        if (!metrics) {
+          metrics = {
+            centerName: vendor,
+            leadVendor: vendor,
+            totalTransfers: 0,
+            pendingApproval: 0,
+            dqCount: 0
+          }
+        }
+
+        const rawScore = calculateRawScore(metrics)
+        rawScores.push(rawScore)
+      })
+
+      // Find min and max for normalization
+      const minScore = rawScores.length > 0 ? Math.min(...rawScores) : 0
+      const maxScore = rawScores.length > 0 ? Math.max(...rawScores) : 1
+      const scoreRange = maxScore - minScore
+
+      // Second pass: calculate normalized scores and build result
+      thresholdMap.forEach((threshold, vendor) => {
+        let metrics = vendorMap.get(vendor)
+
         if (!metrics) {
           metrics = {
             centerName: vendor,
@@ -245,8 +244,15 @@ const { data: centers } = await useAsyncData<BpoCenterMetric[]>(
           previousMetrics.totalTransfers
         )
 
-        // Calculate performance score
-        metrics.performanceScore = calculatePerformanceScore(metrics, threshold)
+        // Calculate normalized performance score (1-100)
+        const rawScore = calculateRawScore(metrics)
+        let normalizedScore = 1
+        if (scoreRange > 0) {
+          normalizedScore = ((rawScore - minScore) / scoreRange) * 99 + 1
+        } else if (rawScore > 0) {
+          normalizedScore = 100
+        }
+        metrics.performanceScore = Math.round(normalizedScore * 10) / 10
 
         // Determine performance category
         metrics.performanceCategory = getPerformanceCategory(

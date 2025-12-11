@@ -31,7 +31,7 @@ const isNewCarrier = ref(false)
 
 const openRuleModal = (rule?: AlertRule) => {
   if (rule) {
-    selectedRule.value = { ...rule } // Clone
+  selectedRule.value = { ...rule } // Clone
     isNewRule.value = false
   } else {
     // Create new rule
@@ -211,28 +211,28 @@ const saveRule = async (updatedRule: Partial<AlertRule>) => {
     }
   } else {
     // Update existing rule
-    const { error } = await supabase
-      .from('alert_rules')
-      .update({
-        rule_name: updatedRule.rule_name,
+  const { error } = await supabase
+    .from('alert_rules')
+    .update({
+      rule_name: updatedRule.rule_name,
         rule_type: updatedRule.rule_type,
-        description: updatedRule.description,
-        alert_message_template: updatedRule.alert_message_template,
-        condition_settings: updatedRule.condition_settings,
-        is_active: updatedRule.is_active,
-        channels: updatedRule.channels,
-        recipients: updatedRule.recipients,
+      description: updatedRule.description,
+      alert_message_template: updatedRule.alert_message_template,
+      condition_settings: updatedRule.condition_settings,
+      is_active: updatedRule.is_active,
+      channels: updatedRule.channels,
+      recipients: updatedRule.recipients,
         priority: updatedRule.priority,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', selectedRule.value.id)
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', selectedRule.value.id)
 
-    if (error) {
-      toast.add({ title: 'Error saving rule', description: error.message, color: 'error' })
-    } else {
-      toast.add({ title: 'Rule updated', color: 'success' })
-      isRuleModalOpen.value = false
-      await loadData()
+  if (error) {
+    toast.add({ title: 'Error saving rule', description: error.message, color: 'error' })
+  } else {
+    toast.add({ title: 'Rule updated', color: 'success' })
+    isRuleModalOpen.value = false
+    await loadData()
     }
   }
   loading.value = false
