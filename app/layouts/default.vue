@@ -25,23 +25,25 @@ const links = [[
   }
 },
 
-{
-  label: 'Dashboard',
-  icon: 'i-lucide-layout-dashboard',
-  to: '/dashboard',
-  onSelect: () => {
-    open.value = false
-  }
-},
+// Dashboard - Hidden for now, uncomment when needed
+// {
+//   label: 'Dashboard',
+//   icon: 'i-lucide-layout-dashboard',
+//   to: '/dashboard',
+//   onSelect: () => {
+//     open.value = false
+//   }
+// },
 
-{
-  label: 'Analytics',
-  icon: 'i-lucide-chart-line',
-  to: '/analytics',
-  onSelect: () => {
-    open.value = false
-  }
-}, 
+// Analytics - Hidden for now, uncomment when needed
+// {
+//   label: 'Analytics',
+//   icon: 'i-lucide-chart-line',
+//   to: '/analytics',
+//   onSelect: () => {
+//     open.value = false
+//   }
+// }, 
 
 {
   label: 'BPOs Performance',
@@ -92,14 +94,16 @@ const links = [[
     onSelect: () => {
       open.value = false
     }
-  },   
-  {
-    label: 'Integrations',
-    to: '/settings/integrations',
-    onSelect: () => {
-      open.value = false
-    }
   }
+  // Integrations - Hidden for now, uncomment when needed
+  // ,   
+  // {
+  //   label: 'Integrations',
+  //   to: '/settings/integrations',
+  //   onSelect: () => {
+  //     open.value = false
+  //   }
+  // }
   
   ]
 }]] satisfies NavigationMenuItem[][]

@@ -889,7 +889,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <UDashboardPanel>
+  <UDashboardPanel class="flex flex-col h-screen">
     <UDashboardNavbar title="Alerts & Notifications">
       <template #right>
         <UButton
@@ -902,9 +902,9 @@ onMounted(() => {
       </template>
     </UDashboardNavbar>
 
-    <div class="flex flex-col gap-4 p-4">
+    <div class="flex flex-col gap-4 p-4 flex-1 min-h-0">
       <!-- Filter Controls with Search and Alert Selector -->
-      <div class="flex flex-wrap items-center justify-between gap-3">
+      <div class="flex flex-wrap items-center justify-between gap-3 flex-shrink-0">
         <div class="flex flex-wrap items-center gap-3">
 
           <!-- Date Range -->
@@ -1025,37 +1025,36 @@ onMounted(() => {
       <!-- Alert Info Banner removed (no Alert Type selector in UI) -->
 
       <!-- Grid Table -->
-      <div class="overflow-x-auto border border-gray-200 dark:border-gray-800 rounded-lg">
-        <!-- vertical scrolling area for table body so header stays visible and a scrollbar appears -->
-        <div class="max-h-[60vh] overflow-y-auto pr-2">
+      <div class="flex-1 min-h-0 flex flex-col border border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden">
+        <!-- Empty State (shown inside table when no data) -->
+        <div v-if="filteredMetrics.length === 0 && !loading" class="flex-1 flex flex-col items-center justify-center text-gray-500">
+          <UIcon name="i-heroicons-check-circle" class="w-12 h-12 text-green-500 mb-3" />
+          <p class="text-lg font-medium">All Good!</p>
+          <p class="text-sm">No centers found matching your search.</p>
+        </div>
+        <!-- Table (shown when there is data) -->
+        <div v-else class="flex-1 overflow-y-auto overflow-x-auto">
           <div class="min-w-full">
             <UTable
-          v-model:row-selection="rowSelection"
-          :data="filteredMetrics"
-          :columns="columns"
-          :loading="loading"
-          :ui="{
-            base: 'table-fixed border-separate border-spacing-0',
-            thead: '[&>tr]:bg-elevated/50 [&>tr]:after:content-none',
-            tbody: '[&>tr]:last:[&>td]:border-b-0',
-            th: 'py-3 px-4 first:rounded-l-lg last:rounded-r-lg border-y border-default first:border-l last:border-r font-medium text-gray-700 dark:text-gray-200',
-            td: 'border-b border-default px-4 py-3',
-            separator: 'h-0'
-          }"
+              v-model:row-selection="rowSelection"
+              :data="filteredMetrics"
+              :columns="columns"
+              :loading="loading"
+              :ui="{
+                base: 'table-fixed border-separate border-spacing-0',
+                thead: '[&>tr]:bg-elevated/50 [&>tr]:after:content-none',
+                tbody: '[&>tr]:last:[&>td]:border-b-0',
+                th: 'py-3 px-4 first:rounded-l-lg last:rounded-r-lg border-y border-default first:border-l last:border-r font-medium text-gray-700 dark:text-gray-200',
+                td: 'border-b border-default px-4 py-3',
+                separator: 'h-0'
+              }"
             />
           </div>
         </div>
       </div>
 
-      <!-- Empty State -->
-      <div v-if="filteredMetrics.length === 0 && !loading" class="flex flex-col items-center justify-center py-12 text-gray-500">
-        <UIcon name="i-heroicons-check-circle" class="w-12 h-12 text-green-500 mb-3" />
-        <p class="text-lg font-medium">All Good!</p>
-        <p class="text-sm">No centers found matching your search.</p>
-      </div>
-
       <!-- Results Summary -->
-      <div class="text-sm text-gray-600 dark:text-gray-400 border-t border-gray-200 dark:border-gray-800 pt-4">
+      <div class="text-sm text-gray-600 dark:text-gray-400 border-t border-gray-200 dark:border-gray-800 pt-4 flex-shrink-0">
         <span class="font-medium">{{ filteredMetrics.length }}</span> centers displayed
       </div>
     </div>
