@@ -60,14 +60,19 @@ const links = [[
   onSelect: () => {
     open.value = false
   }
-}, {
-  label: 'Reports',
-  icon: 'i-lucide-bar-chart-3',
-  to: '/reports',
-  onSelect: () => {
-    open.value = false
-  }
-}, {
+},
+
+// Reports - Hidden for now, uncomment when needed
+// {
+//   label: 'Reports',
+//   icon: 'i-lucide-bar-chart-3',
+//   to: '/reports',
+//   onSelect: () => {
+//     open.value = false
+//   }
+// },
+
+{
   label: 'Settings',
   to: '/settings',
   icon: 'i-lucide-settings',

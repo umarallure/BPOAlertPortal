@@ -726,15 +726,6 @@ watch(() => dateRange.value, async (val) => {
   await loadData()
 }, { deep: true })
 
-const getTierColor = (tier: string) => {
-  switch (tier) {
-    case 'A': return 'border-green-500'
-    case 'B': return 'border-yellow-500'
-    case 'C': return 'border-red-500'
-    default: return 'border-gray-200'
-  }
-}
-
 const getTierBadgeColor = (tier: string) => {
   switch (tier) {
     case 'A': return 'green'
@@ -742,30 +733,6 @@ const getTierBadgeColor = (tier: string) => {
     case 'C': return 'red'
     default: return 'gray'
   }
-}
-
-function getRowItems(row: Row<CenterMetrics>) {
-  return [
-    {
-      type: 'label',
-      label: 'Actions'
-    },
-    {
-      label: 'Trigger Alert',
-      icon: 'i-lucide-bell',
-      disabled: !row.original.center.slack_webhook_url,
-      onSelect() {
-        triggerAlert(row.original.center.id)
-      }
-    },
-    {
-      type: 'separator'
-    },
-    {
-      label: 'View Details',
-      icon: 'i-lucide-list'
-    }
-  ]
 }
 
 const columns: TableColumn<CenterMetrics>[] = [
