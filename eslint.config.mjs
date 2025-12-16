@@ -17,6 +17,13 @@ export default withNuxt({
     'no-trailing-spaces': 'off',
     'indent': 'off',
     'quote-props': 'off',
+    'quotes': 'off',
+    'comma-dangle': 'off',
+    'operator-linebreak': 'off',
+    '@stylistic/no-trailing-spaces': 'off',
+    '@stylistic/quotes': 'off',
+    '@stylistic/comma-dangle': 'off',
+    '@stylistic/operator-linebreak': 'off',
 
     '@typescript-eslint/no-explicit-any': 'off'
   }

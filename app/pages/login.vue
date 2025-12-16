@@ -10,6 +10,7 @@ const error = ref('')
 
 const router = useRouter()
 const supabase = useSupabaseClient()
+const { role, refresh: refreshRole } = useAccessRole()
 
 const handleLogin = async () => {
   if (!email.value || !password.value) {
@@ -32,8 +33,13 @@ const handleLogin = async () => {
     }
 
     if (data.user) {
-      // Redirect to dashboard
-      router.push('/')
+      await refreshRole()
+      if (role.value === 'center') {
+        router.push('/daily-deal-flow')
+      } else {
+        // Redirect to dashboard
+        router.push('/')
+      }
     }
   } catch (err: any) {
     error.value = err.message || 'An error occurred during login'

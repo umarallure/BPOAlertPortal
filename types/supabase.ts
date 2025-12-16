@@ -122,6 +122,33 @@ export type Database = {
         }
         Relationships: []
       }
+      carriers: {
+        Row: {
+          carrier_code: string | null
+          carrier_name: string
+          display_order: number | null
+          id: string
+          is_active: boolean | null
+          notes: string | null
+        }
+        Insert: {
+          carrier_code?: string | null
+          carrier_name: string
+          display_order?: number | null
+          id?: string
+          is_active?: boolean | null
+          notes?: string | null
+        }
+        Update: {
+          carrier_code?: string | null
+          carrier_name?: string
+          display_order?: number | null
+          id?: string
+          is_active?: boolean | null
+          notes?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

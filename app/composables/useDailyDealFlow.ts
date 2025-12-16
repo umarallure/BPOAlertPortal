@@ -6,6 +6,7 @@ export type DailyDealFlowUpdate = Database['public']['Tables']['daily_deal_flow'
 
 export const useDailyDealFlow = () => {
   const supabase = useSupabaseClient()
+  const { role, leadVendor, refresh: refreshRole, loading: roleLoading } = useAccessRole()
 
   // Fetch paginated daily deal flow entries
   const fetchAll = async (filters?: {
@@ -23,12 +24,22 @@ export const useDailyDealFlow = () => {
   }) => {
     const pageSize = filters?.limit || 1000
     const offset = filters?.offset || 0
+
+    // Ensure role is resolved before building scoped queries
+    if (role.value === 'unknown' && !roleLoading.value) {
+      await refreshRole()
+    }
     
     let query = supabase
       .from('daily_deal_flow')
       .select('*', { count: 'exact' })
       .order('created_at', { ascending: false })
       .range(offset, offset + pageSize - 1)
+
+    // Center users can only see their own lead_vendor records
+    if (role.value === 'center' && leadVendor.value) {
+      query = query.eq('lead_vendor', leadVendor.value)
+    }
 
     // Apply filters
     if (filters?.status && filters.status !== 'all') {

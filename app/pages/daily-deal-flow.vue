@@ -26,6 +26,9 @@ const table = useTemplateRef('table')
 const router = useRouter()
 const supabase = useSupabaseClient()
 
+const { role } = useAccessRole()
+const isCenterUser = computed(() => role.value === 'center')
+
 const columnFilters = ref([{
   id: 'insured_name',
   value: ''
@@ -99,22 +102,34 @@ onMounted(() => {
 })
 
 function getRowItems(row: Row<DailyDealFlow>) {
+  const copyItem = {
+    label: 'Copy submission ID',
+    icon: 'i-lucide-copy',
+    onSelect() {
+      navigator.clipboard.writeText(row.original.submission_id)
+      toast.add({
+        title: 'Copied to clipboard',
+        description: 'Submission ID copied to clipboard'
+      })
+    }
+  }
+
+  if (isCenterUser.value) {
+    return [
+      {
+        type: 'label',
+        label: 'Actions'
+      },
+      copyItem
+    ]
+  }
+
   return [
     {
       type: 'label',
       label: 'Actions'
     },
-    {
-      label: 'Copy submission ID',
-      icon: 'i-lucide-copy',
-      onSelect() {
-        navigator.clipboard.writeText(row.original.submission_id)
-        toast.add({
-          title: 'Copied to clipboard',
-          description: 'Submission ID copied to clipboard'
-        })
-      }
-    },
+    copyItem,
     {
       type: 'separator'
     },
@@ -146,21 +161,29 @@ function getRowItems(row: Row<DailyDealFlow>) {
 const columns: TableColumn<DailyDealFlow>[] = [
   {
     id: 'select',
-    header: ({ table }) =>
-      h(UCheckbox, {
+    header: ({ table }) => {
+      if (isCenterUser.value) {
+        return h('span')
+      }
+      return h(UCheckbox, {
         'modelValue': table.getIsSomePageRowsSelected()
           ? 'indeterminate'
           : table.getIsAllPageRowsSelected(),
         'onUpdate:modelValue': (value: boolean | 'indeterminate') =>
           table.toggleAllPageRowsSelected(!!value),
         'ariaLabel': 'Select all'
-      }),
-    cell: ({ row }) =>
-      h(UCheckbox, {
+      })
+    },
+    cell: ({ row }) => {
+      if (isCenterUser.value) {
+        return h('span')
+      }
+      return h(UCheckbox, {
         'modelValue': row.getIsSelected(),
         'onUpdate:modelValue': (value: boolean | 'indeterminate') => row.toggleSelected(!!value),
         'ariaLabel': 'Select row'
       })
+    }
   },
   {
     accessorKey: 'submission_id',
@@ -293,6 +316,9 @@ const columns: TableColumn<DailyDealFlow>[] = [
   {
     id: 'actions',
     cell: ({ row }) => {
+      if (isCenterUser.value) {
+        return h('span')
+      }
       return h(
         'div',
         { class: 'text-right' },

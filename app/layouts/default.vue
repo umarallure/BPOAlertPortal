@@ -4,6 +4,8 @@ import type { NavigationMenuItem } from '@nuxt/ui'
 const route = useRoute()
 const toast = useToast()
 
+const { role } = useAccessRole()
+
 const open = ref(false)
 
 const links = [[
@@ -82,6 +84,42 @@ const links = [[
     }]
   },
   {
+    label: 'On Boarding Guide',
+    icon: 'i-lucide-book-open',
+    to: '/on-boarding-guide/carriers',
+    defaultOpen: true,
+    type: 'trigger',
+    children: [{
+      label: 'Carriers',
+      to: '/on-boarding-guide/carriers',
+      exact: true,
+      onSelect: () => {
+        open.value = false
+      }
+    }, {
+      label: 'GHL Walkthrough',
+      to: '/on-boarding-guide/ghl-walkthrough',
+      exact: true,
+      onSelect: () => {
+        open.value = false
+      }
+    }, {
+      label: 'Docs',
+      to: '/on-boarding-guide/docs',
+      exact: true,
+      onSelect: () => {
+        open.value = false
+      }
+    }, {
+      label: 'Underwriting Instructions',
+      to: '/on-boarding-guide/underwriting-instructions',
+      exact: true,
+      onSelect: () => {
+        open.value = false
+      }
+    }]
+  },
+  {
     label: 'Settings',
     to: '/settings',
     icon: 'i-lucide-settings',
@@ -121,6 +159,14 @@ const links = [[
     ]
   }
 ]] satisfies NavigationMenuItem[][]
+
+const navItems = computed(() => {
+  const base = links[0] ?? []
+  if (role.value === 'center') {
+    return base.filter(item => item.to === '/daily-deal-flow')
+  }
+  return base
+})
 
 const groups = computed(() => [{
   id: 'links',
@@ -183,7 +229,7 @@ onMounted(async () => {
 
         <UNavigationMenu
           :collapsed="collapsed"
-          :items="links[0]"
+          :items="navItems"
           orientation="vertical"
           tooltip
           popover
