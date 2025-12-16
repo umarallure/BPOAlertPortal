@@ -39,6 +39,24 @@ export type AgencyTopPerformers = {
   mostImproved: { name: string, value: string }
 }
 
+const feedbackTimestampFormatter = new Intl.DateTimeFormat('en-US', {
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hour12: true,
+  timeZone: 'UTC'
+})
+
+const formatFeedbackTimestamp = (value?: string) => {
+  if (!value) return ''
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return String(value)
+  return `${feedbackTimestampFormatter.format(d)} UTC`
+}
+
 export async function downloadAgencyPerformanceReportPdf(params: {
   filename: string
   weekLabel: string
@@ -213,7 +231,7 @@ export async function downloadCallCenterPerformanceReportPdf(params: {
       cursorY += 14
 
       for (const fb of feedbacks) {
-        const timestamp = fb.createdAt ? new Date(fb.createdAt).toLocaleString() : ''
+        const timestamp = formatFeedbackTimestamp(fb.createdAt)
         const byLine = timestamp
           ? `Feedback by ${fb.feedbackBy || 'admin'} (${timestamp}):`
           : `Feedback by ${fb.feedbackBy || 'admin'}:`

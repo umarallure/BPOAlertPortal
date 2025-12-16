@@ -85,6 +85,23 @@ const feedbackCenter = ref<Pick<CallCenterReport, 'id' | 'centerName'> | null>(n
 const feedbackTitle = ref('')
 const feedbackDescription = ref('')
 
+const feedbackTimestampFormatter = new Intl.DateTimeFormat('en-US', {
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hour12: true,
+  timeZone: 'UTC'
+})
+
+const formatFeedbackTimestamp = (value: string) => {
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return value
+  return `${feedbackTimestampFormatter.format(d)} UTC`
+}
+
 const feedbackByCenterId = ref<Record<string, CallCenterFeedbackRow[]>>({})
 
 const openFeedbackModal = (center: CallCenterReport) => {
@@ -100,10 +117,15 @@ const loadFeedbacks = async (centerIds: string[]) => {
     return
   }
 
+  const dateFrom = formatDateEST(range.value.start)
+  const dateTo = formatDateEST(range.value.end)
+
   const { data, error } = await supabase
     .from('call_center_feedback')
     .select('id,center_id,title,description,feedback_by,created_at')
     .in('center_id', centerIds)
+    .gte('created_at', `${dateFrom}T00:00:00`)
+    .lte('created_at', `${dateTo}T23:59:59.999`)
     .order('created_at', { ascending: false })
 
   if (error) {
@@ -333,7 +355,8 @@ const displayedCallCenters = computed(() => {
 })
 
 const displayedCenterIdsKey = computed(() => displayedCallCenters.value.map(c => c.id).sort().join(','))
-watch(displayedCenterIdsKey, async () => {
+const feedbackLoadKey = computed(() => `${displayedCenterIdsKey.value}|${formatDateEST(range.value.start)}-${formatDateEST(range.value.end)}`)
+watch(feedbackLoadKey, async () => {
   await loadFeedbacks(displayedCallCenters.value.map(c => c.id))
 }, { immediate: true })
 
@@ -453,7 +476,7 @@ const callCenterMetricsColumns: TableColumn<CallCenterMetricRow>[] = [{
                 <div class="text-xs text-gray-500">Feedback by: {{ fb.feedback_by || 'admin' }}</div>
                 <div class="mt-1 text-sm font-semibold">{{ fb.title }}</div>
                 <div class="mt-1 text-sm text-gray-700 dark:text-gray-200 whitespace-pre-wrap">{{ fb.description }}</div>
-                <div class="mt-2 text-xs text-gray-500">{{ new Date(fb.created_at).toLocaleString() }}</div>
+                <div class="mt-2 text-xs text-gray-500">{{ formatFeedbackTimestamp(fb.created_at) }}</div>
               </div>
             </div>
           </UPageCard>
