@@ -7,111 +7,120 @@ const toast = useToast()
 const open = ref(false)
 
 const links = [[
- 
-{
-  label: 'Score Board',
-  icon: 'i-lucide-chart-bar',
-  to: '/',
-  onSelect: () => {
-    open.value = false}
-},
-
-{
-  label: 'Daily Deal Flow',
-  icon: 'i-lucide-clipboard-list',
-  to: '/daily-deal-flow',
-  onSelect: () => {
-    open.value = false
-  }
-},
-
-// Dashboard - Hidden for now, uncomment when needed
-// {
-//   label: 'Dashboard',
-//   icon: 'i-lucide-layout-dashboard',
-//   to: '/dashboard',
-//   onSelect: () => {
-//     open.value = false
-//   }
-// },
-
-// Analytics - Hidden for now, uncomment when needed
-// {
-//   label: 'Analytics',
-//   icon: 'i-lucide-chart-line',
-//   to: '/analytics',
-//   onSelect: () => {
-//     open.value = false
-//   }
-// }, 
-
-{
-  label: 'BPOs Performance',
-  icon: 'i-lucide-building-2',
-  to: '/bpo-centers',
-  onSelect: () => {
-    open.value = false
-  }
-}, {
-  label: 'Alerts',
-  icon: 'i-lucide-bell',
-  to: '/alerts',
-  badge: '3',
-  onSelect: () => {
-    open.value = false
-  }
-},
-
-// Reports - Hidden for now, uncomment when needed
-// {
-//   label: 'Reports',
-//   icon: 'i-lucide-bar-chart-3',
-//   to: '/reports',
-//   onSelect: () => {
-//     open.value = false
-//   }
-// },
-
-{
-  label: 'Settings',
-  to: '/settings',
-  icon: 'i-lucide-settings',
-  defaultOpen: true,
-  type: 'trigger',
-  children: [{
-    label: 'General',
-    to: '/settings',
-    exact: true,
-    onSelect: () => {
-      open.value = false
-    }
-  }, 
   {
-    label: 'BPO Thresholds',
-    to: '/settings/bpo-thresholds',
+    label: 'Score Board',
+    icon: 'i-lucide-chart-bar',
+    to: '/',
     onSelect: () => {
       open.value = false
     }
   },
   {
-    label: 'Alert Rules',
-    to: '/settings/alert-rules',
+    label: 'Daily Deal Flow',
+    icon: 'i-lucide-clipboard-list',
+    to: '/daily-deal-flow',
     onSelect: () => {
       open.value = false
     }
-  }
-  // Integrations - Hidden for now, uncomment when needed
-  // ,   
+  },
+
+  // Dashboard - Hidden for now, uncomment when needed
   // {
-  //   label: 'Integrations',
-  //   to: '/settings/integrations',
+  //   label: 'Dashboard',
+  //   icon: 'i-lucide-layout-dashboard',
+  //   to: '/dashboard',
   //   onSelect: () => {
   //     open.value = false
   //   }
-  // }
-  
-  ]
-}]] satisfies NavigationMenuItem[][]
+  // },
+
+  // Analytics - Hidden for now, uncomment when needed
+  // {
+  //   label: 'Analytics',
+  //   icon: 'i-lucide-chart-line',
+  //   to: '/analytics',
+  //   onSelect: () => {
+  //     open.value = false
+  //   }
+  // },
+
+  {
+    label: 'BPOs Performance',
+    icon: 'i-lucide-building-2',
+    to: '/bpo-centers',
+    onSelect: () => {
+      open.value = false
+    }
+  },
+  {
+    label: 'Alerts',
+    icon: 'i-lucide-bell',
+    to: '/alerts',
+    badge: '3',
+    onSelect: () => {
+      open.value = false
+    }
+  },
+  {
+    label: 'Reports',
+    icon: 'i-lucide-bar-chart-3',
+    to: '/reports/agencyperformance',
+    defaultOpen: true,
+    type: 'trigger',
+    children: [{
+      label: 'Agency Performance',
+      to: '/reports/agencyperformance',
+      onSelect: () => {
+        open.value = false
+      }
+    }, {
+      label: 'Call Center Performance',
+      to: '/reports/callcenterperformance',
+      onSelect: () => {
+        open.value = false
+      }
+    }]
+  },
+  {
+    label: 'Settings',
+    to: '/settings',
+    icon: 'i-lucide-settings',
+    defaultOpen: true,
+    type: 'trigger',
+    children: [{
+      label: 'General',
+      to: '/settings',
+      exact: true,
+      onSelect: () => {
+        open.value = false
+      }
+    },
+    {
+      label: 'BPO Thresholds',
+      to: '/settings/bpo-thresholds',
+      onSelect: () => {
+        open.value = false
+      }
+    },
+    {
+      label: 'Alert Rules',
+      to: '/settings/alert-rules',
+      onSelect: () => {
+        open.value = false
+      }
+    }
+    // Integrations - Hidden for now, uncomment when needed
+    // ,
+    // {
+    //   label: 'Integrations',
+    //   to: '/settings/integrations',
+    //   onSelect: () => {
+    //     open.value = false
+    //   }
+    // }
+    ]
+  }
+]] satisfies NavigationMenuItem[][]
 
 const groups = computed(() => [{
   id: 'links',
