@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import AssetUploadModal from '~/components/onboarding/AssetUploadModal.vue'
+import ConfirmModal from '~/components/ui/ConfirmModal.vue'
+
 type AssetItem = {
   name: string
   url: string
@@ -10,6 +13,14 @@ const FOLDER = 'docs/files'
 const SIGNED_URL_TTL_SECONDS = 60 * 60
 
 const supabase = useSupabaseClient()
+const toast = useToast()
+
+const { role, refresh: refreshRole } = useAccessRole()
+const isAdmin = computed(() => role.value === 'admin')
+const isUploadOpen = ref(false)
+const isDeleteOpen = ref(false)
+const deleteTarget = ref<AssetItem | null>(null)
+const deleting = ref(false)
 
 const selectedDoc = ref<AssetItem | null>(null)
 const items = ref<AssetItem[]>([])
@@ -50,6 +61,10 @@ const loadAssets = async () => {
     }
 
     if (f.name.endsWith('/')) {
+      return false
+    }
+
+    if (f.name.endsWith('.meta.json')) {
       return false
     }
 
@@ -95,7 +110,50 @@ const refresh = async () => {
   await loadAssets()
 }
 
+const askRemoveAsset = (item: AssetItem) => {
+  if (!isAdmin.value) {
+    return
+  }
+  deleteTarget.value = item
+  isDeleteOpen.value = true
+}
+
+const confirmRemoveAsset = async () => {
+  if (!isAdmin.value || !deleteTarget.value) {
+    return
+  }
+
+  deleting.value = true
+  try {
+    const item = deleteTarget.value
+    const assetPath = `${FOLDER}/${item.name}`
+    const metaPath = `${assetPath}.meta.json`
+
+    const { error: removeError } = await supabase
+      .storage
+      .from(BUCKET)
+      .remove([assetPath, metaPath])
+
+    if (removeError) {
+      toast.add({ title: 'Delete failed', description: removeError.message, color: 'error' })
+      return
+    }
+
+    if (selectedDoc.value?.name === item.name) {
+      selectedDoc.value = null
+    }
+
+    toast.add({ title: 'Deleted', description: 'File deleted successfully.', color: 'success' })
+    isDeleteOpen.value = false
+    deleteTarget.value = null
+    await refresh()
+  } finally {
+    deleting.value = false
+  }
+}
+
 onMounted(() => {
+  refreshRole()
   loadAssets()
 })
 
@@ -135,18 +193,48 @@ function officeViewerUrl(srcUrl: string) {
             <div class="flex items-center justify-between">
               <div>
                 <h2 class="text-base font-semibold text-highlighted">Docs</h2>
-                <p class="text-sm text-muted">Drop docs into <span class="font-mono">BPOAlertPortal/docs/files</span> (PDF/images).</p>
               </div>
-              <UButton
-                label="Refresh"
-                icon="i-lucide-refresh-cw"
-                color="neutral"
-                variant="outline"
-                size="xs"
-                @click="() => refresh()"
-              />
+              <div class="flex items-center gap-2">
+                <UButton
+                  v-if="isAdmin"
+                  label="Upload"
+                  icon="i-lucide-upload"
+                  color="neutral"
+                  variant="outline"
+                  size="xs"
+                  @click="isUploadOpen = true"
+                />
+                <UButton
+                  label="Refresh"
+                  icon="i-lucide-refresh-cw"
+                  color="neutral"
+                  variant="outline"
+                  size="xs"
+                  @click="() => refresh()"
+                />
+              </div>
             </div>
           </template>
+
+          <AssetUploadModal
+            v-model:open="isUploadOpen"
+            :bucket="BUCKET"
+            :folder="FOLDER"
+            accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,image/*"
+            @uploaded="refresh"
+          />
+
+          <ConfirmModal
+            v-model:open="isDeleteOpen"
+            title="Delete file"
+            description="Are you sure you want to delete this file? This cannot be undone."
+            confirm-text="Delete"
+            cancel-text="Cancel"
+            confirm-color="error"
+            :loading="deleting"
+            @confirm="confirmRemoveAsset"
+            @cancel="() => { deleteTarget = null }"
+          />
 
           <div class="grid grid-cols-1 gap-4 p-4 lg:grid-cols-3">
             <div class="lg:col-span-1">
@@ -170,7 +258,17 @@ function officeViewerUrl(srcUrl: string) {
                         <div class="text-sm font-medium text-highlighted truncate">{{ doc.name }}</div>
                         <div class="text-xs text-muted">{{ doc.ext.toUpperCase() }}</div>
                       </div>
-                      <UIcon name="i-lucide-file-text" class="size-4 shrink-0 text-muted" />
+                      <div class="flex items-center gap-2 shrink-0">
+                        <UButton
+                          v-if="isAdmin"
+                          icon="i-lucide-trash"
+                          color="neutral"
+                          variant="ghost"
+                          size="xs"
+                          @click.stop="askRemoveAsset(doc)"
+                        />
+                        <UIcon name="i-lucide-file-text" class="size-4 text-muted" />
+                      </div>
                     </div>
                   </button>
                 </div>
