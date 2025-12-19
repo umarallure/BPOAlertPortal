@@ -53,6 +53,17 @@ const recipientsInput = computed({
   }
 })
 
+const onConditionSettingsChange = (val: string) => {
+  try {
+    state.value.condition_settings = JSON.parse(val)
+  } catch (e: any) {
+    console.log('[alert-rule-modal] invalid condition_settings JSON', {
+      value: val,
+      error: e?.message ?? String(e)
+    })
+  }
+}
+
 const onSave = () => {
   emit('save', state.value)
 }
@@ -102,9 +113,9 @@ const onSave = () => {
         <UFormField label="Condition Settings (JSON)">
           <UTextarea 
             :model-value="JSON.stringify(state.condition_settings, null, 2)"
-            @update:model-value="(val) => { try { state.condition_settings = JSON.parse(val) } catch {} }"
             :rows="5" 
             class="font-mono text-sm w-full"
+            @update:model-value="onConditionSettingsChange"
           />
         </UFormField>
 
