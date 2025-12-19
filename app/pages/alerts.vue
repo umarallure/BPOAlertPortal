@@ -465,34 +465,64 @@ const triggerAlert = async (centerId: string) => {
   } else if (alertType.value === 'sales_alert') {
     if (centerMetric) {
       const now = new Date()
-      
+
       const formatter = new Intl.DateTimeFormat('en-US', {
-        timeZone: 'America/New_York',
+        timeZone: 'Asia/Karachi',
         hour: 'numeric',
         minute: 'numeric',
         hour12: false
       })
-      
-      const usTimeParts = formatter.formatToParts(now)
-      const currentHour = parseInt(usTimeParts.find(p => p.type === 'hour')?.value || '0')
-      const currentMinute = parseInt(usTimeParts.find(p => p.type === 'minute')?.value || '0')
-      
-      let hoursRemaining = 0
-      
-      if (currentHour >= 9 && currentHour < 19) {
-        hoursRemaining = 19 - currentHour - (currentMinute / 60)
-      } else if (currentHour < 9) {
-        hoursRemaining = 19 - currentHour - (currentMinute / 60)
-      } else {
-        const minutesUntilMidnight = (60 - currentMinute) / 60
-        const hoursUntilMidnight = 24 - currentHour - 1
-        hoursRemaining = minutesUntilMidnight + hoursUntilMidnight + 19
+
+      const pkTimeParts = formatter.formatToParts(now)
+      const currentHour = parseInt(pkTimeParts.find(p => p.type === 'hour')?.value || '0')
+      const currentMinute = parseInt(pkTimeParts.find(p => p.type === 'minute')?.value || '0')
+
+      const currentSales = centerMetric.salesCount
+      let hoursRemaining: number = 0
+      let calcMode: string = 'outside_shift'
+
+      // Shift window: 8:00 PM -> 6:00 AM (Pakistan time)
+      const inShift = currentHour >= 20 || currentHour < 6
+      if (inShift) {
+        // End time is 06:00. If we are 20:00-23:59, 06:00 is next day.
+        const minutesToSixAM =
+          currentHour >= 20
+            ? ((24 - currentHour + 6) * 60) - currentMinute
+            : ((6 - currentHour) * 60) - currentMinute
+
+        hoursRemaining = Math.max(0, minutesToSixAM / 60)
+        calcMode = 'exact_to_6am'
+
+        // Special rounding rules for 11:00pm PKT hour
+        if (currentHour === 23) {
+          if (currentMinute >= 30 && currentMinute <= 59) {
+            hoursRemaining = 6.5
+            calcMode = 'override_6_5'
+          } else if (currentMinute >= 0 && currentMinute <= 29) {
+            hoursRemaining = 7
+            calcMode = 'override_7'
+          }
+        }
+
+        if (calcMode === 'exact_to_6am') {
+          hoursRemaining = Math.ceil(hoursRemaining)
+          calcMode = 'ceil_to_hour'
+        }
       }
-      
-      hoursRemaining = Math.floor(Math.max(0, hoursRemaining))
-      
-      filterValues.current_sales = centerMetric.salesCount
+
+      filterValues.current_sales = currentSales
       filterValues.hours_remaining = hoursRemaining
+
+      console.log('[alerts][sales_alert] payload calc', {
+        center: centerMetric.center?.center_name,
+        nowIso: now.toISOString(),
+        timezone: 'Asia/Karachi',
+        pkHour: currentHour,
+        pkMinute: currentMinute,
+        current_sales: currentSales,
+        hours_remaining: hoursRemaining,
+        calcMode
+      })
       
       if (rule && rule.condition_settings) {
         filterValues.condition_settings = rule.condition_settings
@@ -580,33 +610,69 @@ const triggerBulkAlerts = async () => {
       filterValues.milestone_percentage = milestonePercentage.value
     } else if (alertType.value === 'sales_alert') {
       const now = new Date()
-      
+
       const formatter = new Intl.DateTimeFormat('en-US', {
-        timeZone: 'America/New_York',
+        timeZone: 'Asia/Karachi',
         hour: 'numeric',
         minute: 'numeric',
         hour12: false
       })
-      
-      const usTimeParts = formatter.formatToParts(now)
-      const currentHour = parseInt(usTimeParts.find(p => p.type === 'hour')?.value || '0')
-      const currentMinute = parseInt(usTimeParts.find(p => p.type === 'minute')?.value || '0')
-      
-      let hoursRemaining = 0
-      
-      if (currentHour >= 9 && currentHour < 19) {
-        hoursRemaining = 19 - currentHour - (currentMinute / 60)
-      } else if (currentHour < 9) {
-        hoursRemaining = 19 - currentHour - (currentMinute / 60)
-      } else {
-        const minutesUntilMidnight = (60 - currentMinute) / 60
-        const hoursUntilMidnight = 24 - currentHour - 1
-        hoursRemaining = minutesUntilMidnight + hoursUntilMidnight + 19
+
+      const pkTimeParts = formatter.formatToParts(now)
+      const currentHour = parseInt(pkTimeParts.find(p => p.type === 'hour')?.value || '0')
+      const currentMinute = parseInt(pkTimeParts.find(p => p.type === 'minute')?.value || '0')
+
+      let hoursRemaining: number = 0
+      let calcMode: string = 'outside_shift'
+
+      // Shift window: 8:00 PM -> 6:00 AM (Pakistan time)
+      const inShift = currentHour >= 20 || currentHour < 6
+      if (inShift) {
+        const minutesToSixAM =
+          currentHour >= 20
+            ? ((24 - currentHour + 6) * 60) - currentMinute
+            : ((6 - currentHour) * 60) - currentMinute
+
+        hoursRemaining = Math.max(0, minutesToSixAM / 60)
+        calcMode = 'exact_to_6am'
+
+        // Special rounding rules for 11:00pm PKT hour
+        if (currentHour === 23) {
+          if (currentMinute >= 30 && currentMinute <= 59) {
+            hoursRemaining = 6.5
+            calcMode = 'override_6_5'
+          } else if (currentMinute >= 0 && currentMinute <= 29) {
+            hoursRemaining = 7
+            calcMode = 'override_7'
+          }
+        }
+
+        // Default rounding: avoid long decimals in Slack (e.g. 5.966666...)
+        // Keep the special 11pm overrides as-is.
+        if (calcMode === 'exact_to_6am') {
+          hoursRemaining = Math.ceil(hoursRemaining)
+          calcMode = 'ceil_to_hour'
+        }
       }
-      
-      hoursRemaining = Math.floor(Math.max(0, hoursRemaining))
-      
+
       filterValues.hours_remaining = hoursRemaining
+
+      const salesByCenterId: Record<string, number> = {}
+      for (const id of centerIds) {
+        const m = metrics.value.find(mm => mm.center.id === id)
+        salesByCenterId[id] = m?.salesCount ?? 0
+      }
+      filterValues.sales_by_center_id = salesByCenterId
+
+      console.log('[alerts][sales_alert][bulk] payload calc', {
+        nowIso: now.toISOString(),
+        timezone: 'Asia/Karachi',
+        pkHour: currentHour,
+        pkMinute: currentMinute,
+        hours_remaining: hoursRemaining,
+        sales_by_center_id_count: Object.keys(salesByCenterId).length,
+        calcMode
+      })
       
       if (rule && rule.condition_settings) {
         filterValues.condition_settings = rule.condition_settings
