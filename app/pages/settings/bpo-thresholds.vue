@@ -28,7 +28,7 @@ const editingRows = ref<Set<string>>(new Set())
 const searchQuery = ref('')
 const selectedTier = ref<string | null>(null)
 
-const tierOptions = [
+const tierOptions: Array<{ label: string, value: 'A' | 'B' | 'C', color: 'success' | 'warning' | 'error' }> = [
   { label: 'Tier A - Premium', value: 'A', color: 'success' },
   { label: 'Tier B - Standard', value: 'B', color: 'warning' },
   { label: 'Tier C - Developing', value: 'C', color: 'error' }
@@ -116,7 +116,7 @@ const saveCenter = async (center: CenterThreshold) => {
   loading.value = false
 }
 
-const getTierColor = (tier: string) => {
+const getTierColor = (tier: string): 'success' | 'warning' | 'error' | 'neutral' => {
   const option = tierOptions.find(t => t.value === tier)
   return option?.color || 'neutral'
 }
@@ -229,14 +229,14 @@ onMounted(() => {
               />
               <USelectMenu
                 v-model="selectedTier"
-                :options="[
+                :items="[
                   { label: 'All Tiers', value: null },
                   { label: 'Tier A', value: 'A' },
                   { label: 'Tier B', value: 'B' },
                   { label: 'Tier C', value: 'C' }
                 ]"
-                option-attribute="label"
-                value-attribute="value"
+                label-key="label"
+                value-key="value"
                 placeholder="Filter by tier"
                 size="sm"
                 class="w-48"
@@ -290,9 +290,9 @@ onMounted(() => {
                   <USelectMenu
                     v-if="isEditing(center.id)"
                     v-model="center.tier"
-                    :options="tierOptions"
-                    option-attribute="label"
-                    value-attribute="value"
+                    :items="tierOptions"
+                    label-key="label"
+                    value-key="value"
                     size="sm"
                   />
                   <UBadge v-else :color="getTierColor(center.tier)" variant="subtle">

@@ -4,8 +4,10 @@ import { DateFormatter } from '@internationalized/date'
 import { subDays } from 'date-fns'
 import type { Range } from '~/types'
 import HomeDateRangePicker from '~/components/home/HomeDateRangePicker.vue'
-import { calculatePercentageChange, formatDateEST, getPreviousPeriodRange } from '~/utils'
+import { calculatePercentageChange, formatDateEST } from '~/utils'
 import { downloadAgencyPerformanceReportPdf } from '~/utils/reportExport'
+import { fetchByContiguousRanges } from '~/utils/supabaseWorkingDayQuery'
+import { getPreviousBusinessDatesForComparison, getWorkingDatesBetween } from '~/utils/workingDays'
 
 type ExecutiveSummaryRow = {
   metric: string
@@ -94,17 +96,29 @@ const exportAgencyReport = async () => {
   })
 }
 
-const fetchDealFlowLite = async (dateFrom: string, dateTo: string) => {
-  const { data, count, error } = await supabase
-    .from('daily_deal_flow')
-    .select('lead_vendor,status,call_result', { count: 'exact' })
-    .gte('date', dateFrom)
-    .lte('date', dateTo)
-    .range(0, 99999)
+const fetchDealFlowLiteByWorkingDates = async (dates: Date[]) => {
+  const { data, error } = await fetchByContiguousRanges<DealFlowLite>(
+    dates,
+    async (r) => {
+      const { data, count, error } = await supabase
+        .from('daily_deal_flow')
+        .select('lead_vendor,status,call_result', { count: 'exact' })
+        .gte('date', r.dateFrom)
+        .lte('date', r.dateTo)
+        .range(0, 99999)
+
+      return {
+        data: (data || []) as DealFlowLite[],
+        error,
+        count
+      }
+    },
+    { pageSize: 100000 }
+  )
 
   return {
     data: (data || []) as DealFlowLite[],
-    count: count || 0,
+    count: data?.length || 0,
     error
   }
 }
@@ -113,16 +127,16 @@ const { data: agencyData, status: agencyStatus, refresh: refreshAgency } = await
   'reports-agencyperformance',
   async () => {
     try {
-      const dateFrom = formatDateEST(range.value.start)
-      const dateTo = formatDateEST(range.value.end)
-
-      const previousRange = getPreviousPeriodRange(range.value, subDays)
-      const previousDateFrom = formatDateEST(previousRange.start)
-      const previousDateTo = formatDateEST(previousRange.end)
+      const currentBusinessDates = getWorkingDatesBetween(range.value.start, range.value.end, {
+        excludeSaturday: true
+      })
+      const previousBusinessDates = getPreviousBusinessDatesForComparison(currentBusinessDates, {
+        excludeSaturday: true
+      })
 
       const [{ data: currentData, count: currentCount, error: currentError }, { data: previousData, count: previousCount, error: previousError }] = await Promise.all([
-        fetchDealFlowLite(dateFrom, dateTo),
-        fetchDealFlowLite(previousDateFrom, previousDateTo)
+        fetchDealFlowLiteByWorkingDates(currentBusinessDates),
+        fetchDealFlowLiteByWorkingDates(previousBusinessDates)
       ])
 
       if (currentError) {

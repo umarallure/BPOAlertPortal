@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { DateFormatter, CalendarDate, today } from '@internationalized/date'
-import { watch } from 'vue'
+import { DateFormatter, CalendarDate, today, type DateValue } from '@internationalized/date'
+import { onMounted, watch } from 'vue'
 import type { Range } from '~/types'
+import { clampToPreviousWorkingDay, getLastNWorkingDates, getWorkingDatesBetween } from '~/utils/workingDays'
 
 const df = new DateFormatter('en-US', {
   dateStyle: 'medium'
@@ -11,17 +12,59 @@ const selected = defineModel<Range>({ required: true })
 
 const mode = ref<'single' | 'range'>('range')
 
+const isSunday = (date: Date) => date.getDay() === 0
+
+const clampToNonSundayCalendarDate = (date: CalendarDate) => {
+  const js = date.toDate('America/New_York')
+  if (!isSunday(js)) return date
+  return date.subtract({ days: 1 })
+}
+
+const clampToNonSundayDate = (date: Date) => {
+  if (!isSunday(date)) return date
+  const d = new Date(date)
+  d.setDate(d.getDate() - 1)
+  return d
+}
+
+const clampModelToNonSunday = () => {
+  const start = selected.value.start
+  const end = selected.value.end
+  if (!start && !end) return
+
+  const safeStart = start ? clampToNonSundayDate(start) : undefined
+  const safeEnd = end ? clampToNonSundayDate(end) : undefined
+
+  if (safeStart !== start || safeEnd !== end) {
+    selected.value = {
+      start: safeStart || clampToNonSundayDate(new Date()),
+      end: safeEnd || safeStart || clampToNonSundayDate(new Date())
+    }
+  }
+}
+
 // Watch mode changes to reset calendar selection
 watch(mode, (newMode) => {
   if (newMode === 'single') {
     // For single mode, ensure we have a single date
-    const currentDate = selected.value.start || new Date()
+    const currentDate = clampToNonSundayDate(selected.value.start || new Date())
     selected.value = {
       start: currentDate,
       end: currentDate
     }
   }
 })
+
+onMounted(() => {
+  clampModelToNonSunday()
+})
+
+watch(
+  () => [selected.value.start, selected.value.end],
+  () => {
+    clampModelToNonSunday()
+  }
+)
 
 const ranges = [
   { label: 'Today', days: 0 },
@@ -51,15 +94,18 @@ const calendarRange = computed({
       // For single date, set both start and end to the selected date
       const date = newValue.start || newValue.end
       if (date) {
+        const safeDate = clampToNonSundayCalendarDate(date)
         selected.value = {
-          start: date.toDate('America/New_York'),
-          end: date.toDate('America/New_York')
+          start: safeDate.toDate('America/New_York'),
+          end: safeDate.toDate('America/New_York')
         }
       }
     } else {
+      const safeStart = newValue.start ? clampToNonSundayCalendarDate(newValue.start) : null
+      const safeEnd = newValue.end ? clampToNonSundayCalendarDate(newValue.end) : null
       selected.value = {
-        start: newValue.start ? newValue.start.toDate('America/New_York') : new Date(),
-        end: newValue.end ? newValue.end.toDate('America/New_York') : new Date()
+        start: safeStart ? safeStart.toDate('America/New_York') : clampToNonSundayDate(new Date()),
+        end: safeEnd ? safeEnd.toDate('America/New_York') : clampToNonSundayDate(new Date())
       }
     }
   }
@@ -68,47 +114,67 @@ const calendarRange = computed({
 const isRangeSelected = (range: { days?: number, months?: number, years?: number }) => {
   if (!selected.value.start || !selected.value.end) return false
 
-  const currentDate = today('America/New_York')
-  let startDate = currentDate.copy()
+  const end = clampToPreviousWorkingDay(today('America/New_York').toDate('America/New_York'))
 
-  if (range.days) {
-    startDate = startDate.subtract({ days: range.days })
+  let workingDates: Date[] = []
+  if (range.days !== undefined) {
+    const n = Math.max(1, range.days || 1)
+    workingDates = getLastNWorkingDates(end, n)
   } else if (range.months) {
-    startDate = startDate.subtract({ months: range.months })
+    const startCandidate = today('America/New_York').subtract({ months: range.months }).toDate('America/New_York')
+    workingDates = getWorkingDatesBetween(startCandidate, end)
   } else if (range.years) {
-    startDate = startDate.subtract({ years: range.years })
+    const startCandidate = today('America/New_York').subtract({ years: range.years }).toDate('America/New_York')
+    workingDates = getWorkingDatesBetween(startCandidate, end)
   }
 
+  if (!workingDates.length) {
+    workingDates = [end]
+  }
+
+  const expectedStart = toCalendarDate(workingDates[0]!)
+  const expectedEnd = toCalendarDate(workingDates[workingDates.length - 1]!)
   const selectedStart = toCalendarDate(selected.value.start)
   const selectedEnd = toCalendarDate(selected.value.end)
 
-  return selectedStart.compare(startDate) === 0 && selectedEnd.compare(currentDate) === 0
+  return selectedStart.compare(expectedStart) === 0 && selectedEnd.compare(expectedEnd) === 0
 }
 
 const selectRange = (range: { days?: number, months?: number, years?: number }) => {
-  const endDate = today('America/New_York')
-  let startDate = endDate.copy()
+  const end = clampToPreviousWorkingDay(today('America/New_York').toDate('America/New_York'))
 
-  if (range.days) {
-    startDate = startDate.subtract({ days: range.days })
+  let workingDates: Date[] = []
+  if (range.days !== undefined) {
+    const n = Math.max(1, range.days || 1)
+    workingDates = getLastNWorkingDates(end, n)
   } else if (range.months) {
-    startDate = startDate.subtract({ months: range.months })
+    const startCandidate = today('America/New_York').subtract({ months: range.months }).toDate('America/New_York')
+    workingDates = getWorkingDatesBetween(startCandidate, end)
   } else if (range.years) {
-    startDate = startDate.subtract({ years: range.years })
+    const startCandidate = today('America/New_York').subtract({ years: range.years }).toDate('America/New_York')
+    workingDates = getWorkingDatesBetween(startCandidate, end)
+  }
+
+  if (!workingDates.length) {
+    workingDates = [end]
   }
 
   selected.value = {
-    start: startDate.toDate('America/New_York'),
-    end: endDate.toDate('America/New_York')
+    start: workingDates[0]!,
+    end: workingDates[workingDates.length - 1]!
   }
 }
 
 const selectSingleDate = (date: CalendarDate) => {
-  const jsDate = date.toDate('America/New_York')
+  const jsDate = clampToNonSundayDate(date.toDate('America/New_York'))
   selected.value = {
     start: jsDate,
     end: jsDate
   }
+}
+
+const isCalendarSunday = (date: DateValue) => {
+  return isSunday(date.toDate('America/New_York'))
 }
 </script>
 
@@ -201,6 +267,7 @@ const selectSingleDate = (date: CalendarDate) => {
             class="p-2"
             :range="mode === 'range'"
             :number-of-months="mode === 'range' ? 2 : 1"
+            :is-date-disabled="isCalendarSunday"
           />
         </div>
       </div>

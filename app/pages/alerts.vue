@@ -3,10 +3,10 @@ import { DateFormatter } from '@internationalized/date'
 import HomeDateRangePicker from '~/components/home/HomeDateRangePicker.vue'
 import type { Range, AlertRule } from '~/types'
 import type { TableColumn } from '@nuxt/ui'
-import type { Row } from '@tanstack/table-core'
+import { getWorkingDatesBetween } from '~/utils/workingDays'
 
 const supabase = useSupabaseClient()
-const { fetchAll } = useDailyDealFlow()
+const { fetchAllByWorkingDates } = useDailyDealFlow()
 const toast = useToast()
 
 interface CenterThreshold {
@@ -161,8 +161,6 @@ const computePkShift = (d: Date) => {
   }
 }
 
-const formatDate = (date: Date) => date.toISOString().split('T')[0]
-
 // Load initial data
 const loadData = async () => {
   loading.value = true
@@ -194,24 +192,21 @@ const loadData = async () => {
       }
     }
 
-    // 3. Fetch Today's Stats
-    // Build filter object for fetchAll (same behavior as Daily Deal Flow)
-    const today = new Date().toISOString().split('T')[0]
-    const filterObj: any = { limit: 10000 }
-
-    // Date filters
-    if (dateRange.value?.start && dateRange.value?.end) {
-      filterObj.dateFrom = formatDate(dateRange.value.start)
-      filterObj.dateTo = formatDate(dateRange.value.end)
-    } else {
-      // default to today
-      filterObj.date = today
-    }
+    // 3. Fetch Stats (Mon–Fri business dates)
+    const end = dateRange.value?.end || new Date()
+    const start = dateRange.value?.start || end
+    const currentBusinessDates = getWorkingDatesBetween(start, end, {
+      excludeSaturday: true
+    })
 
     // (status filter removed) — loadData will fetch for the selected date range only
     // (removed carrier/agent/callResult/leadVendor filters)
 
-    const { data: flowData, error } = await fetchAll(filterObj)
+    const { data: flowData, error } = await fetchAllByWorkingDates({
+      dates: currentBusinessDates,
+      limit: 10000,
+      offset: 0
+    })
 
     if (error) throw error
 
@@ -233,31 +228,32 @@ const loadData = async () => {
 
     // Process flow data
     if (flowData) {
+      const flowRows = flowData as any[]
       // Group by lead_vendor
-      const grouped = flowData.reduce((acc, curr) => {
+      const grouped = flowRows.reduce<Record<string, any[]>>((acc, curr: any) => {
         const vendor = curr.lead_vendor || 'Unknown'
         if (!acc[vendor]) acc[vendor] = []
         acc[vendor].push(curr)
         return acc
-      }, {} as Record<string, any[]>)
+      }, {})
 
       // Update metrics
       Object.entries(grouped).forEach(([vendor, items]) => {
         const centerMetric = metricsMap.get(vendor)
         if (centerMetric) {
           const total = items.length
-          const sales = items.filter(i => 
+          const sales = (items as any[]).filter((i: any) => 
             (i.status && i.status.toLowerCase().includes('sale')) || 
             (i.status && i.status.toLowerCase().includes('pending approval'))
           )
-          const dqs = items.filter(i => 
+          const dqs = (items as any[]).filter((i: any) => 
             (i.status && i.status.toLowerCase().includes('dq')) || 
             (i.call_result && i.call_result.toLowerCase().includes('dq'))
           )
-          const underwritingItems = items.filter(i =>
+          const underwritingItems = (items as any[]).filter((i: any) =>
             i.call_result && i.call_result.toLowerCase().includes('underwriting')
           )
-          const approvals = items.filter(i => 
+          const approvals = (items as any[]).filter((i: any) => 
             i.status && i.status.toLowerCase().includes('sale')
           )
 

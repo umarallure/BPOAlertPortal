@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { Period, Range } from '~/types'
 import { DateFormatter } from '@internationalized/date'
+import { getWorkingDatesBetween } from '~/utils/workingDays'
 
 const props = defineProps<{
   period: Period
@@ -16,7 +17,7 @@ interface RateMetric {
   color: string
 }
 
-const { fetchAll } = useDailyDealFlow()
+const { fetchAllByWorkingDates } = useDailyDealFlow()
 
 const dateFormatter = new DateFormatter('en-CA', {
   dateStyle: 'short',
@@ -31,13 +32,12 @@ const { data: rates } = await useAsyncData<RateMetric[]>(
   () => `analytics-rates-${formatDateEST(props.range.start)}-${formatDateEST(props.range.end)}`,
   async () => {
     try {
-      const dateFrom = formatDateEST(props.range.start)
-      const dateTo = formatDateEST(props.range.end)
+      const currentBusinessDates = getWorkingDatesBetween(props.range.start, props.range.end, {
+        excludeSaturday: true
+      })
 
-      // Fetch all data for the date range
-      const { data, count, error } = await fetchAll({
-        dateFrom,
-        dateTo,
+      const { data, error } = await fetchAllByWorkingDates({
+        dates: currentBusinessDates,
         limit: 10000,
         offset: 0
       })
@@ -81,7 +81,7 @@ const { data: rates } = await useAsyncData<RateMetric[]>(
       }
 
       // Calculate metrics based on fetched data
-      const totalTransfers = count || 0
+      const totalTransfers = data.length
 
       // Approval Rate = entries with status "Pending Approval" / Total Transfers * 100
       const approvalCount = data.filter(d => d.status === 'Pending Approval').length
@@ -199,7 +199,7 @@ const { data: rates } = await useAsyncData<RateMetric[]>(
           <span>{{ rate.count }} of {{ rate.total }}</span>
           <span>{{ rate.total ? ((rate.count / rate.total) * 100).toFixed(1) : '0.0' }}%</span>
         </div>
-        <UProgress :value="rate.total ? (rate.count / rate.total) * 100 : 0" :ui="{ progress: `bg-${rate.color}` }" />
+        <UProgress :value="rate.total ? (rate.count / rate.total) * 100 : 0" :ui="{ indicator: `bg-${rate.color}` }" />
       </div>
     </div>
   </div>

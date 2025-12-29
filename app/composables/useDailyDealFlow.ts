@@ -1,4 +1,6 @@
-import type { Database } from '~/types/supabase'
+import type { Database } from '~~/types/supabase'
+import { fetchByContiguousRanges } from '~/utils/supabaseWorkingDayQuery'
+import { formatDateEST } from '~/utils'
 
 export type DailyDealFlow = Database['public']['Tables']['daily_deal_flow']['Row']
 export type DailyDealFlowInsert = Database['public']['Tables']['daily_deal_flow']['Insert']
@@ -79,6 +81,46 @@ export const useDailyDealFlow = () => {
     return { data: data || [], error: null, count: count || 0 }
   }
 
+  const fetchAllByWorkingDates = async (params: {
+    dates: Date[]
+    agent?: string
+    status?: string
+    carrier?: string
+    callResult?: string
+    leadVendor?: string
+    insuredName?: string
+    limit?: number
+    offset?: number
+  }) => {
+    const { dates, ...rest } = params
+
+    const { data, error } = await fetchByContiguousRanges<DailyDealFlow>(
+      dates,
+      async (range) => {
+        const res = await fetchAll({
+          ...rest,
+          dateFrom: range.dateFrom,
+          dateTo: range.dateTo,
+          limit: range.limit,
+          offset: range.offset
+        })
+
+        return {
+          data: res.data,
+          error: res.error,
+          count: res.count
+        }
+      },
+      { pageSize: params.limit || 10000 }
+    )
+
+    if (error || !data) {
+      return { data: [], error, count: 0 }
+    }
+
+    return { data, error: null, count: data.length }
+  }
+
   // Fetch single entry by ID
   const fetchById = async (id: string) => {
     const { data, error } = await supabase
@@ -143,7 +185,7 @@ export const useDailyDealFlow = () => {
 
   // Get metrics for dashboard
   const getMetrics = async (date?: string) => {
-    const targetDate = date || new Date().toISOString().split('T')[0]
+    const targetDate = date || formatDateEST(new Date())
     
     const { data, error } = await supabase
       .from('daily_deal_flow')
@@ -184,6 +226,7 @@ export const useDailyDealFlow = () => {
 
   return {
     fetchAll,
+    fetchAllByWorkingDates,
     fetchById,
     create,
     update,

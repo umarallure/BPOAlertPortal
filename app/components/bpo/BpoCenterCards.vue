@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { Period, Range } from '~/types'
-import { subDays } from 'date-fns'
-import { getPreviousPeriodRange, formatDateEST, calculatePercentageChange } from '~/utils'
+import { formatDateEST, calculatePercentageChange } from '~/utils'
+import { getPreviousBusinessDatesForComparison, getWorkingDatesBetween } from '~/utils/workingDays'
 
 const props = defineProps<{
   period: Period
@@ -40,7 +40,7 @@ interface BpoCenterMetric {
   color: string
 }
 
-const { fetchAll } = useDailyDealFlow()
+const { fetchAllByWorkingDates } = useDailyDealFlow()
 const supabase = useSupabaseClient()
 
 const calculateRawScore = (
@@ -80,8 +80,8 @@ const { data: centers } = await useAsyncData<BpoCenterMetric[]>(
   () => `bpo-centers-${formatDateEST(props.range.start)}-${formatDateEST(props.range.end)}`,
   async () => {
     try {
-      const dateFrom = formatDateEST(props.range.start)
-      const dateTo = formatDateEST(props.range.end)
+      const shouldLog = import.meta.dev
+      const toYmd = (d: Date) => formatDateEST(d)
 
       // Fetch thresholds
       const { data: thresholds, error: thresholdError } = await supabase
@@ -98,10 +98,41 @@ const { data: centers } = await useAsyncData<BpoCenterMetric[]>(
       const thresholdMap = new Map<string, CenterThreshold>()
       thresholds.forEach(t => thresholdMap.set(t.lead_vendor, t))
 
-      // Fetch current period data
-      const { data: currentData, error } = await fetchAll({
-        dateFrom,
-        dateTo,
+      const currentWorkingDates = getWorkingDatesBetween(props.range.start, props.range.end, {
+        excludeSaturday: true
+      })
+      const previousWorkingDates = getPreviousBusinessDatesForComparison(currentWorkingDates, {
+        excludeSaturday: true
+      })
+
+      if (shouldLog) {
+        console.log('[BPO Center Performance][1] Selected range (raw):', {
+          start: props.range.start,
+          end: props.range.end,
+          startYmd: toYmd(props.range.start),
+          endYmd: toYmd(props.range.end)
+        })
+        console.log('[BPO Center Performance][2] Current business dates (Mon-Fri):', {
+          count: currentWorkingDates.length,
+          first: currentWorkingDates[0] ? toYmd(currentWorkingDates[0]) : null,
+          last: currentWorkingDates[currentWorkingDates.length - 1]
+            ? toYmd(currentWorkingDates[currentWorkingDates.length - 1]!)
+            : null,
+          dates: currentWorkingDates.map(toYmd)
+        })
+        console.log('[BPO Center Performance][3] Previous working dates for comparison:', {
+          count: previousWorkingDates.length,
+          first: previousWorkingDates[0] ? toYmd(previousWorkingDates[0]) : null,
+          last: previousWorkingDates[previousWorkingDates.length - 1]
+            ? toYmd(previousWorkingDates[previousWorkingDates.length - 1]!)
+            : null,
+          dates: previousWorkingDates.map(toYmd)
+        })
+      }
+
+      // Fetch current period data (working days only)
+      const { data: currentData, error } = await fetchAllByWorkingDates({
+        dates: currentWorkingDates,
         limit: 10000,
         offset: 0
       })
@@ -111,20 +142,30 @@ const { data: centers } = await useAsyncData<BpoCenterMetric[]>(
         return []
       }
 
-      const previousRange = getPreviousPeriodRange(props.range, subDays)
-      const previousDateFrom = formatDateEST(previousRange.start)
-      const previousDateTo = formatDateEST(previousRange.end)
-
-      const { data: previousData } = await fetchAll({
-        dateFrom: previousDateFrom,
-        dateTo: previousDateTo,
+      const { data: previousData } = await fetchAllByWorkingDates({
+        dates: previousWorkingDates,
         limit: 10000,
         offset: 0
       })
 
+      if (shouldLog) {
+        console.log('[BPO Center Performance][4] Fetch results summary:', {
+          current: {
+            rowCount: currentData.length,
+            firstRow: currentData[0] || null,
+            lastRow: currentData[currentData.length - 1] || null
+          },
+          previous: {
+            rowCount: previousData?.length || 0,
+            firstRow: previousData?.[0] || null,
+            lastRow: previousData?.[previousData.length - 1] || null
+          }
+        })
+      }
+
       const vendorMap = new Map<string, any>()
 
-      currentData.forEach(record => {
+      currentData.forEach((record) => {
         const vendor = record.lead_vendor || 'Unknown'
 
         if (!vendorMap.has(vendor)) {
@@ -155,7 +196,7 @@ const { data: centers } = await useAsyncData<BpoCenterMetric[]>(
 
       const previousVendorMap = new Map<string, any>()
       if (previousData) {
-        previousData.forEach(record => {
+        previousData.forEach((record) => {
           const vendor = record.lead_vendor || 'Unknown'
 
           if (!previousVendorMap.has(vendor)) {
@@ -180,6 +221,88 @@ const { data: centers } = await useAsyncData<BpoCenterMetric[]>(
           ) {
             metrics.dqCount++
           }
+        })
+      }
+
+      if (shouldLog) {
+        console.log('[BPO Center Performance][5] Aggregated vendor maps:', {
+          currentVendors: Array.from(vendorMap.keys()),
+          previousVendors: Array.from(previousVendorMap.keys()),
+          currentTotalsPreview: Array.from(vendorMap.entries()).slice(0, 10).map(([vendor, m]) => ({
+            vendor,
+            totalTransfers: m.totalTransfers,
+            pendingApproval: m.pendingApproval,
+            dqCount: m.dqCount
+          })),
+          previousTotalsPreview: Array.from(previousVendorMap.entries()).slice(0, 10).map(([vendor, m]) => ({
+            vendor,
+            totalTransfers: m.totalTransfers,
+            pendingApproval: m.pendingApproval,
+            dqCount: m.dqCount
+          }))
+        })
+      }
+
+      if (shouldLog) {
+        const vendorsToInspect = Array.from(new Set([
+          ...thresholdMap.keys(),
+          ...vendorMap.keys(),
+          ...previousVendorMap.keys()
+        ]))
+
+        const perCenterComparison = vendorsToInspect.map((vendor) => {
+          const cur = vendorMap.get(vendor) || {
+            totalTransfers: 0,
+            pendingApproval: 0,
+            dqCount: 0
+          }
+          const prev = previousVendorMap.get(vendor) || {
+            totalTransfers: 0,
+            pendingApproval: 0,
+            dqCount: 0
+          }
+
+          const curApprovalRatio = cur.totalTransfers > 0
+            ? Math.round((cur.pendingApproval / cur.totalTransfers) * 1000) / 10
+            : 0
+          const curDqRate = cur.totalTransfers > 0
+            ? Math.round((cur.dqCount / cur.totalTransfers) * 1000) / 10
+            : 0
+
+          const prevApprovalRatio = prev.totalTransfers > 0
+            ? Math.round((prev.pendingApproval / prev.totalTransfers) * 1000) / 10
+            : 0
+          const prevDqRate = prev.totalTransfers > 0
+            ? Math.round((prev.dqCount / prev.totalTransfers) * 1000) / 10
+            : 0
+
+          return {
+            leadVendor: vendor,
+            current: {
+              totalTransfers: cur.totalTransfers,
+              pendingApproval: cur.pendingApproval,
+              dqCount: cur.dqCount,
+              approvalRatio: curApprovalRatio,
+              dqRate: curDqRate
+            },
+            previous: {
+              totalTransfers: prev.totalTransfers,
+              pendingApproval: prev.pendingApproval,
+              dqCount: prev.dqCount,
+              approvalRatio: prevApprovalRatio,
+              dqRate: prevDqRate
+            },
+            trendInputs: {
+              currentTransfers: cur.totalTransfers,
+              previousTransfers: prev.totalTransfers
+            }
+          }
+        })
+
+        console.log('[BPO Center Performance][5.1] Per-center raw totals (current vs previous):', {
+          currentDates: currentWorkingDates.map(toYmd),
+          previousDates: previousWorkingDates.map(toYmd),
+          rows: perCenterComparison
         })
       }
 
@@ -268,15 +391,34 @@ const { data: centers } = await useAsyncData<BpoCenterMetric[]>(
 
         metrics.tier = threshold.tier
         const colorMap: Record<string, string> = {
-          'green': 'success',
-          'yellow': 'warning',
-          'red': 'error',
-          'gray': 'neutral'
+          green: 'success',
+          yellow: 'warning',
+          red: 'error',
+          gray: 'neutral'
         }
         metrics.color = colorMap[metrics.performanceCategory] || 'neutral'
 
         result.push(metrics as BpoCenterMetric)
       })
+
+      if (shouldLog) {
+        console.log('[BPO Center Performance][6] Final computed center metrics (after comparison):', {
+          count: result.length,
+          sample: result.slice(0, 15).map(r => ({
+            leadVendor: r.leadVendor,
+            tier: r.tier,
+            totalTransfers: r.totalTransfers,
+            pendingApproval: r.pendingApproval,
+            approvalRatio: r.approvalRatio,
+            dqCount: r.dqCount,
+            dqRate: r.dqRate,
+            trend: r.trend,
+            performanceScore: r.performanceScore,
+            performanceCategory: r.performanceCategory,
+            targetProgress: r.targetProgress
+          }))
+        })
+      }
 
       // Sort by performance score (highest first)
       result.sort((a, b) => b.performanceScore - a.performanceScore)
@@ -285,6 +427,18 @@ const { data: centers } = await useAsyncData<BpoCenterMetric[]>(
       result.forEach((center, index) => {
         center.rank = index + 1
       })
+
+      if (shouldLog) {
+        console.log('[BPO Center Performance][7] Final sorted + ranked output:', {
+          top: result.slice(0, 15).map(r => ({
+            rank: r.rank,
+            leadVendor: r.leadVendor,
+            performanceScore: r.performanceScore,
+            performanceCategory: r.performanceCategory,
+            trend: r.trend
+          }))
+        })
+      }
 
       // Group by performance category (green, yellow, red, gray)
       const greenCenters = result.filter(c => c.performanceCategory === 'green')

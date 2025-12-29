@@ -1,18 +1,50 @@
 <script setup lang="ts">
 import type { Period, Range } from '~/types'
-import { subDays } from 'date-fns'
-import { fetchAnalyticsStats, formatDateEST } from '~/utils'
+import { calculateMetricsWithComparison, buildStatsFromMetrics, formatDateEST } from '~/utils'
+import { getPreviousBusinessDatesForComparison, getWorkingDatesBetween } from '~/utils/workingDays'
 
 const props = defineProps<{
   period: Period
   range: Range
 }>()
 
-const { fetchAll } = useDailyDealFlow()
+const { fetchAllByWorkingDates } = useDailyDealFlow()
 
 const { data: stats } = await useAsyncData(
   () => `analytics-stats-${formatDateEST(props.range.start)}-${formatDateEST(props.range.end)}`,
-  () => fetchAnalyticsStats(props.range, fetchAll, subDays),
+  async () => {
+    const currentBusinessDates = getWorkingDatesBetween(props.range.start, props.range.end, {
+      excludeSaturday: true
+    })
+    const previousBusinessDates = getPreviousBusinessDatesForComparison(currentBusinessDates, {
+      excludeSaturday: true
+    })
+
+    const { data: currentData, error: currentError } = await fetchAllByWorkingDates({
+      dates: currentBusinessDates,
+      limit: 10000,
+      offset: 0
+    })
+
+    if (currentError) {
+      return []
+    }
+
+    const { data: previousData, error: previousError } = await fetchAllByWorkingDates({
+      dates: previousBusinessDates,
+      limit: 10000,
+      offset: 0
+    })
+
+    const { metrics, changes } = calculateMetricsWithComparison(
+      currentData,
+      currentData.length,
+      previousError ? null : previousData,
+      previousError ? 0 : (previousData?.length || 0)
+    )
+
+    return buildStatsFromMetrics(metrics, changes)
+  },
   {
     watch: [() => props.period, () => props.range],
     default: () => []
