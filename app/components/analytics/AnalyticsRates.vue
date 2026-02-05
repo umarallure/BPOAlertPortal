@@ -6,6 +6,7 @@ import { getWorkingDatesBetween } from '~/utils/workingDays'
 const props = defineProps<{
   period: Period
   range: Range
+  retentionOnly?: boolean
 }>()
 
 interface RateMetric {
@@ -28,8 +29,13 @@ const formatDateEST = (date: Date): string => {
   return dateFormatter.format(date)
 }
 
+const retentionFilter = (d: any) => {
+  const v = d?.retention_agent
+  return v !== null && v !== undefined && String(v).trim() !== ''
+}
+
 const { data: rates } = await useAsyncData<RateMetric[]>(
-  () => `analytics-rates-${formatDateEST(props.range.start)}-${formatDateEST(props.range.end)}`,
+  () => `analytics-rates-${formatDateEST(props.range.start)}-${formatDateEST(props.range.end)}-${Boolean(props.retentionOnly)}`,
   async () => {
     try {
       const currentBusinessDates = getWorkingDatesBetween(props.range.start, props.range.end, {
@@ -81,19 +87,25 @@ const { data: rates } = await useAsyncData<RateMetric[]>(
       }
 
       // Calculate metrics based on fetched data
-      const totalTransfers = data.length
+      const isRetentionOnly = Boolean(props.retentionOnly)
+      const filteredData = isRetentionOnly ? data.filter(retentionFilter) : data
+
+      const totalTransfers = filteredData.length
 
       // Approval Rate = entries with status "Pending Approval" / Total Transfers * 100
-      const approvalCount = data.filter(d => d.status === 'Pending Approval').length
+      const approvalCount = filteredData.filter(d => d.status === 'Pending Approval').length
       const approvalRate = totalTransfers > 0 ? (approvalCount / totalTransfers) * 100 : 0
 
       // Callback Rate = (Total Transfers - Pending Approval) / entries with status "Needs BPO Callback" + "Incomplete Transfer" * 100
-      const needsCallbackCount = data.filter(d => d.status === 'Needs BPO Callback' || d.status === 'Incomplete Transfer').length
+      const needsCallbackCount = filteredData.filter(d => d.status === 'Needs BPO Callback' || d.status === 'Incomplete Transfer').length
       const nonPendingCount = totalTransfers - approvalCount
       const callbackRate = nonPendingCount > 0 ? (needsCallbackCount / nonPendingCount) * 100 : 0
 
+      const fixesCount = filteredData.filter(d => d?.status !== 'Pending Approval').length
+      const fixesRate = totalTransfers > 0 ? (fixesCount / totalTransfers) * 100 : 0
+
       // DQ Rate = (Total Transfers - Pending Approval) / entries with status "Returned To Center - DQ" + "DQ'd Can't be sold" + "GI - Currently DQ" * 100
-      const dqCount = data.filter(d =>
+      const dqCount = filteredData.filter(d =>
         d.status === "Returned To Center - DQ" ||
         d.status === "DQ'd Can't be sold" ||
         d.status === "GI - Currently DQ"
@@ -101,7 +113,7 @@ const { data: rates } = await useAsyncData<RateMetric[]>(
       const dqRate = nonPendingCount > 0 ? (dqCount / nonPendingCount) * 100 : 0
 
       // Underwriting Rate = Count of entries with call_result "Underwriting" / "Pending Approval" * 100
-      const underwritingCount = data.filter(d => d.call_result === 'Underwriting').length
+      const underwritingCount = filteredData.filter(d => d.call_result === 'Underwriting').length
       const underwritingRate = approvalCount > 0 ? (underwritingCount / approvalCount) * 100 : 0
 
       return [
@@ -122,11 +134,11 @@ const { data: rates } = await useAsyncData<RateMetric[]>(
           color: 'info'
         },
         {
-          title: 'DQ Rate',
+          title: isRetentionOnly ? 'Fixes Rate' : 'DQ Rate',
           icon: 'i-lucide-x-circle',
-          percentage: Math.round(dqRate * 10) / 10,
-          total: nonPendingCount,
-          count: dqCount,
+          percentage: Math.round((isRetentionOnly ? fixesRate : dqRate) * 10) / 10,
+          total: isRetentionOnly ? totalTransfers : nonPendingCount,
+          count: isRetentionOnly ? fixesCount : dqCount,
           color: 'error'
         },
         {
@@ -176,7 +188,7 @@ const { data: rates } = await useAsyncData<RateMetric[]>(
       ]
     }
   }, {
-    watch: [() => props.period, () => props.range],
+    watch: [() => props.period, () => props.range, () => props.retentionOnly],
     default: () => []
   })
 </script>

@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import type { DropdownMenuItem } from '@nuxt/ui'
-import { sub } from 'date-fns'
 import type { Period, Range } from '~/types'
 
 const { isNotificationsSlideoverOpen } = useDashboard()
+
+const retentionOnly = ref(false)
+
+const retentionToggleColor = computed(() => retentionOnly.value ? 'primary' : 'neutral')
 
 const items = [[{
   label: 'Export Report',
@@ -55,6 +58,13 @@ const period = ref<Period>('daily')
 
           <HomePeriodSelect v-model="period" :range="range" />
         </template>
+
+        <template #right>
+          <div class="flex items-center justify-end gap-2">
+            <span class="text-sm text-muted">Retention only</span>
+            <USwitch v-model="retentionOnly" size="sm" :color="retentionToggleColor" />
+          </div>
+        </template>
       </UDashboardToolbar>
     </template>
 
@@ -63,13 +73,13 @@ const period = ref<Period>('daily')
         <!-- Key Metrics Section -->
         <div>
           <h2 class="text-lg font-semibold text-highlighted mb-4">Key Metrics</h2>
-          <AnalyticsStats :period="period" :range="range" />
+          <AnalyticsStats :period="period" :range="range" :retention-only="retentionOnly" />
         </div>
 
         <!-- Performance Section -->
         <div>
           <h2 class="text-lg font-semibold text-highlighted mb-4">Performance Rates</h2>
-          <AnalyticsRates :period="period" :range="range" />
+          <AnalyticsRates :period="period" :range="range" :retention-only="retentionOnly" />
         </div>
       </div>
     </template>

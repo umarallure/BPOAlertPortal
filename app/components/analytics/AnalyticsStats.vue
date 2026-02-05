@@ -1,17 +1,18 @@
 <script setup lang="ts">
 import type { Period, Range } from '~/types'
-import { calculateMetricsWithComparison, buildStatsFromMetrics, formatDateEST } from '~/utils'
+import { calculateMetricsWithComparison, buildStatsFromMetrics, calculatePercentageChange, formatDateEST } from '~/utils'
 import { getPreviousBusinessDatesForComparison, getWorkingDatesBetween } from '~/utils/workingDays'
 
 const props = defineProps<{
   period: Period
   range: Range
+  retentionOnly?: boolean
 }>()
 
 const { fetchAllByWorkingDates } = useDailyDealFlow()
 
 const { data: stats } = await useAsyncData(
-  () => `analytics-stats-${formatDateEST(props.range.start)}-${formatDateEST(props.range.end)}`,
+  () => `analytics-stats-${formatDateEST(props.range.start)}-${formatDateEST(props.range.end)}-${Boolean(props.retentionOnly)}`,
   async () => {
     const currentBusinessDates = getWorkingDatesBetween(props.range.start, props.range.end, {
       excludeSaturday: true
@@ -36,17 +37,54 @@ const { data: stats } = await useAsyncData(
       offset: 0
     })
 
+    const isRetentionOnly = Boolean(props.retentionOnly)
+    const retentionFilter = (d: any) => {
+      const v = d?.retention_agent
+      return v !== null && v !== undefined && String(v).trim() !== ''
+    }
+
+    const filteredCurrentData = isRetentionOnly ? (currentData?.filter(retentionFilter) || []) : (currentData || [])
+    const filteredPreviousData = isRetentionOnly
+      ? ((previousError ? null : previousData)?.filter(retentionFilter) || [])
+      : (previousError ? null : previousData)
+
     const { metrics, changes } = calculateMetricsWithComparison(
-      currentData,
-      currentData.length,
-      previousError ? null : previousData,
-      previousError ? 0 : (previousData?.length || 0)
+      filteredCurrentData,
+      filteredCurrentData.length,
+      filteredPreviousData,
+      previousError ? 0 : (filteredPreviousData?.length || 0)
     )
 
-    return buildStatsFromMetrics(metrics, changes)
+    if (!isRetentionOnly) {
+      return buildStatsFromMetrics(metrics, changes)
+    }
+
+    const currentFixes = filteredCurrentData.filter(d => d?.status !== 'Pending Approval').length
+    const previousFixes = (filteredPreviousData || []).filter(d => d?.status !== 'Pending Approval').length
+    const fixesChange = calculatePercentageChange(currentFixes, previousFixes)
+
+    const retentionMetrics = {
+      ...metrics,
+      giCurrentlyDq: currentFixes
+    }
+
+    const retentionChanges = {
+      ...changes,
+      giCurrentlyDq: fixesChange
+    }
+
+    return buildStatsFromMetrics(retentionMetrics, retentionChanges).map((stat) => {
+      if (stat.title === 'GI - Currently DQ') {
+        return {
+          ...stat,
+          title: 'Fixes'
+        }
+      }
+      return stat
+    })
   },
   {
-    watch: [() => props.period, () => props.range],
+    watch: [() => props.period, () => props.range, () => props.retentionOnly],
     default: () => []
   }
 )

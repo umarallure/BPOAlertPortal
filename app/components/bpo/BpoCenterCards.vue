@@ -43,6 +43,11 @@ interface BpoCenterMetric {
 const { fetchAllByWorkingDates } = useDailyDealFlow()
 const supabase = useSupabaseClient()
 
+const isRetentionRecord = (record: any) => {
+  const v = record?.retention_agent
+  return v !== null && v !== undefined && String(v).trim() !== ''
+}
+
 const calculateRawScore = (
   metrics: any
 ): number => {
@@ -166,6 +171,10 @@ const { data: centers } = await useAsyncData<BpoCenterMetric[]>(
       const vendorMap = new Map<string, any>()
 
       currentData.forEach((record) => {
+        if (isRetentionRecord(record)) {
+          return
+        }
+
         const vendor = record.lead_vendor || 'Unknown'
 
         if (!vendorMap.has(vendor)) {
@@ -197,6 +206,10 @@ const { data: centers } = await useAsyncData<BpoCenterMetric[]>(
       const previousVendorMap = new Map<string, any>()
       if (previousData) {
         previousData.forEach((record) => {
+          if (isRetentionRecord(record)) {
+            return
+          }
+
           const vendor = record.lead_vendor || 'Unknown'
 
           if (!previousVendorMap.has(vendor)) {
