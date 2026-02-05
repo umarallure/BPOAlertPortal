@@ -61,7 +61,7 @@ const period = ref<Period>('daily')
 
         <template #right>
           <div class="flex items-center justify-end gap-2">
-            <span class="text-sm text-muted">Retention only</span>
+            <span class="text-sm text-muted">Retention Stats</span>
             <USwitch v-model="retentionOnly" size="sm" :color="retentionToggleColor" />
           </div>
         </template>
