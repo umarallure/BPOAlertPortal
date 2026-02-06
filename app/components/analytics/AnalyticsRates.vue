@@ -34,6 +34,11 @@ const retentionFilter = (d: any) => {
   return v !== null && v !== undefined && String(v).trim() !== ''
 }
 
+const fixesStatuses = new Set([
+  'Pending Failed Payment Fix',
+  'Fulfilled carrier requirements'
+])
+
 const { data: rates } = await useAsyncData<RateMetric[]>(
   () => `analytics-rates-${formatDateEST(props.range.start)}-${formatDateEST(props.range.end)}-${Boolean(props.retentionOnly)}`,
   async () => {
@@ -101,7 +106,7 @@ const { data: rates } = await useAsyncData<RateMetric[]>(
       const nonPendingCount = totalTransfers - approvalCount
       const callbackRate = nonPendingCount > 0 ? (needsCallbackCount / nonPendingCount) * 100 : 0
 
-      const fixesCount = filteredData.filter(d => d?.status !== 'Pending Approval').length
+      const fixesCount = filteredData.filter(d => fixesStatuses.has(String(d?.status || ''))).length
       const fixesRate = totalTransfers > 0 ? (fixesCount / totalTransfers) * 100 : 0
 
       // DQ Rate = (Total Transfers - Pending Approval) / entries with status "Returned To Center - DQ" + "DQ'd Can't be sold" + "GI - Currently DQ" * 100

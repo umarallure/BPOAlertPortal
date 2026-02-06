@@ -59,8 +59,13 @@ const { data: stats } = await useAsyncData(
       return buildStatsFromMetrics(metrics, changes)
     }
 
-    const currentFixes = filteredCurrentData.filter(d => d?.status !== 'Pending Approval').length
-    const previousFixes = (filteredPreviousData || []).filter(d => d?.status !== 'Pending Approval').length
+    const fixesStatuses = new Set([
+      'Pending Failed Payment Fix',
+      'Fulfilled carrier requirements'
+    ])
+
+    const currentFixes = filteredCurrentData.filter(d => fixesStatuses.has(String(d?.status || ''))).length
+    const previousFixes = (filteredPreviousData || []).filter(d => fixesStatuses.has(String(d?.status || ''))).length
     const fixesChange = calculatePercentageChange(currentFixes, previousFixes)
 
     const retentionMetrics = {
