@@ -93,7 +93,8 @@ const { data: rates } = await useAsyncData<RateMetric[]>(
 
       // Calculate metrics based on fetched data
       const isRetentionOnly = Boolean(props.retentionOnly)
-      const filteredData = isRetentionOnly ? data.filter(retentionFilter) : data
+      const nonRetentionFilter = (d: any) => !retentionFilter(d)
+      const filteredData = data.filter(isRetentionOnly ? retentionFilter : nonRetentionFilter)
 
       const totalTransfers = filteredData.length
 

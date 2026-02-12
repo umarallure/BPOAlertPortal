@@ -43,10 +43,11 @@ const { data: stats } = await useAsyncData(
       return v !== null && v !== undefined && String(v).trim() !== ''
     }
 
-    const filteredCurrentData = isRetentionOnly ? (currentData?.filter(retentionFilter) || []) : (currentData || [])
-    const filteredPreviousData = isRetentionOnly
-      ? ((previousError ? null : previousData)?.filter(retentionFilter) || [])
-      : (previousError ? null : previousData)
+    const nonRetentionFilter = (d: any) => !retentionFilter(d)
+    const activeFilter = isRetentionOnly ? retentionFilter : nonRetentionFilter
+
+    const filteredCurrentData = currentData?.filter(activeFilter) || []
+    const filteredPreviousData = (previousError ? null : previousData)?.filter(activeFilter) || []
 
     const { metrics, changes } = calculateMetricsWithComparison(
       filteredCurrentData,
