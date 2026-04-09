@@ -7,6 +7,7 @@ const props = defineProps<{
   period: Period
   range: Range
   retentionOnly?: boolean
+  leadVendors?: string[]
 }>()
 
 interface RateMetric {
@@ -40,7 +41,7 @@ const fixesStatuses = new Set([
 ])
 
 const { data: rates } = await useAsyncData<RateMetric[]>(
-  () => `analytics-rates-${formatDateEST(props.range.start)}-${formatDateEST(props.range.end)}-${Boolean(props.retentionOnly)}`,
+  () => `analytics-rates-${formatDateEST(props.range.start)}-${formatDateEST(props.range.end)}-${Boolean(props.retentionOnly)}-${props.leadVendors?.join(',') || 'all'}`,
   async () => {
     try {
       const currentBusinessDates = getWorkingDatesBetween(props.range.start, props.range.end, {
@@ -50,7 +51,8 @@ const { data: rates } = await useAsyncData<RateMetric[]>(
       const { data, error } = await fetchAllByWorkingDates({
         dates: currentBusinessDates,
         limit: 10000,
-        offset: 0
+        offset: 0,
+        ...(props.leadVendors?.length ? { leadVendors: props.leadVendors } : {})
       })
 
       if (error || !data) {
@@ -194,7 +196,7 @@ const { data: rates } = await useAsyncData<RateMetric[]>(
       ]
     }
   }, {
-    watch: [() => props.period, () => props.range, () => props.retentionOnly],
+    watch: [() => props.period, () => props.range, () => props.retentionOnly, () => props.leadVendors],
     default: () => []
   })
 </script>

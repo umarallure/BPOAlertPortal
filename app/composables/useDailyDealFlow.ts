@@ -20,6 +20,7 @@ export const useDailyDealFlow = () => {
     carrier?: string
     callResult?: string
     leadVendor?: string
+    leadVendors?: string[]
     insuredName?: string
     limit?: number
     offset?: number
@@ -56,7 +57,9 @@ export const useDailyDealFlow = () => {
     if (filters?.callResult && filters.callResult !== 'all') {
       query = query.eq('call_result', filters.callResult)
     }
-    if (filters?.leadVendor && filters.leadVendor !== 'all') {
+    if (filters?.leadVendors && filters.leadVendors.length > 0) {
+      query = query.in('lead_vendor', filters.leadVendors)
+    } else if (filters?.leadVendor && filters.leadVendor !== 'all') {
       query = query.eq('lead_vendor', filters.leadVendor)
     }
     if (filters?.insuredName) {
@@ -88,6 +91,7 @@ export const useDailyDealFlow = () => {
     carrier?: string
     callResult?: string
     leadVendor?: string
+    leadVendors?: string[]
     insuredName?: string
     limit?: number
     offset?: number

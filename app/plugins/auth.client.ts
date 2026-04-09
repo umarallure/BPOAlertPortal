@@ -1,3 +1,6 @@
+const RESTRICTED_USER_ID = '7e0adce3-9870-4902-9a40-e8e42e314cfe'
+const COLOMBIAN_PATHS = ['/colombian-score-board', '/colombian-daily-deal-flow', '/colombian-bpo-centers']
+
 export default defineNuxtPlugin({
   name: 'auth',
   enforce: 'pre',
@@ -25,6 +28,11 @@ export default defineNuxtPlugin({
       // Redirect to login if not authenticated
       if (!session) {
         return '/login'
+      }
+      
+      // Redirect restricted user to Colombian Score Board if accessing other pages
+      if (session?.user?.id === RESTRICTED_USER_ID && !COLOMBIAN_PATHS.includes(to.path)) {
+        return '/colombian-score-board'
       }
       
       return true

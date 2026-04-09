@@ -7,6 +7,7 @@ type CenterAccess = {
   role: ComputedRef<AccessRole>
   leadVendor: ComputedRef<string | null>
   loading: ComputedRef<boolean>
+  userId: ComputedRef<string | null>
   refresh: () => Promise<void>
   reset: () => void
 }
@@ -19,11 +20,13 @@ export const useAccessRole = (): CenterAccess => {
   const roleState = useState<AccessRole>('access_role', () => 'unknown')
   const leadVendorState = useState<string | null>('access_lead_vendor', () => null)
   const loadingState = useState<boolean>('access_loading', () => false)
+  const userIdState = useState<string | null>('access_user_id', () => null)
 
   const reset = () => {
     roleState.value = 'unknown'
     leadVendorState.value = null
     loadingState.value = false
+    userIdState.value = null
   }
 
   const refresh = async () => {
@@ -40,6 +43,8 @@ export const useAccessRole = (): CenterAccess => {
         reset()
         return
       }
+
+      userIdState.value = user.id
 
       const { data: center, error } = await supabase
         .from('centers')
@@ -71,6 +76,7 @@ export const useAccessRole = (): CenterAccess => {
     role: computed(() => roleState.value),
     leadVendor: computed(() => leadVendorState.value),
     loading: computed(() => loadingState.value),
+    userId: computed(() => userIdState.value),
     refresh,
     reset
   }

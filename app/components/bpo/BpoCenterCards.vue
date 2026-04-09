@@ -6,6 +6,7 @@ import { getPreviousBusinessDatesForComparison, getWorkingDatesBetween } from '~
 const props = defineProps<{
   period: Period
   range: Range
+  leadVendors?: string[]
 }>()
 
 interface CenterThreshold {
@@ -82,17 +83,23 @@ const getPerformanceCategory = (
 }
 
 const { data: centers } = await useAsyncData<BpoCenterMetric[]>(
-  () => `bpo-centers-${formatDateEST(props.range.start)}-${formatDateEST(props.range.end)}`,
+  () => `bpo-centers-${formatDateEST(props.range.start)}-${formatDateEST(props.range.end)}-${props.leadVendors?.join(',') || 'all'}`,
   async () => {
     try {
       const shouldLog = import.meta.dev
       const toYmd = (d: Date) => formatDateEST(d)
 
       // Fetch thresholds
-      const { data: thresholds, error: thresholdError } = await supabase
+      let thresholdsQuery = supabase
         .from('center_thresholds')
         .select('*')
         .eq('is_active', true)
+
+      if (props.leadVendors?.length) {
+        thresholdsQuery = thresholdsQuery.in('lead_vendor', props.leadVendors)
+      }
+
+      const { data: thresholds, error: thresholdError } = await thresholdsQuery
 
       if (thresholdError || !thresholds) {
         console.error('Error fetching thresholds:', thresholdError)
@@ -139,7 +146,8 @@ const { data: centers } = await useAsyncData<BpoCenterMetric[]>(
       const { data: currentData, error } = await fetchAllByWorkingDates({
         dates: currentWorkingDates,
         limit: 10000,
-        offset: 0
+        offset: 0,
+        ...(props.leadVendors?.length ? { leadVendors: props.leadVendors } : {})
       })
 
       if (error || !currentData) {
@@ -150,7 +158,8 @@ const { data: centers } = await useAsyncData<BpoCenterMetric[]>(
       const { data: previousData } = await fetchAllByWorkingDates({
         dates: previousWorkingDates,
         limit: 10000,
-        offset: 0
+        offset: 0,
+        ...(props.leadVendors?.length ? { leadVendors: props.leadVendors } : {})
       })
 
       if (shouldLog) {
@@ -466,7 +475,7 @@ const { data: centers } = await useAsyncData<BpoCenterMetric[]>(
     }
   },
   {
-    watch: [() => props.period, () => props.range],
+    watch: [() => props.period, () => props.range, () => props.leadVendors],
     default: () => []
   }
 )

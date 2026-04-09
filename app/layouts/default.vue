@@ -4,7 +4,9 @@ import type { NavigationMenuItem } from '@nuxt/ui'
 const route = useRoute()
 const toast = useToast()
 
-const { role } = useAccessRole()
+const { role, userId } = useAccessRole()
+
+const RESTRICTED_USER_ID = '7e0adce3-9870-4902-9a40-e8e42e314cfe'
 
 const open = ref(false)
 
@@ -53,6 +55,34 @@ const links = [[
     onSelect: () => {
       open.value = false
     }
+  },
+  {
+    label: 'Colombian',
+    icon: 'i-lucide-globe',
+    defaultOpen: true,
+    type: 'trigger',
+    children: [{
+      label: 'Colombian Score Board',
+      to: '/colombian-score-board',
+      exact: true,
+      onSelect: () => {
+        open.value = false
+      }
+    }, {
+      label: 'Colombian Deal Flow',
+      to: '/colombian-daily-deal-flow',
+      exact: true,
+      onSelect: () => {
+        open.value = false
+      }
+    }, {
+      label: 'Colombian BPO Centers',
+      to: '/colombian-bpo-centers',
+      exact: true,
+      onSelect: () => {
+        open.value = false
+      }
+    }]
   },
   {
     label: 'Alerts',
@@ -164,6 +194,11 @@ const navItems = computed(() => {
   const base = links[0] ?? []
   if (role.value === 'center') {
     return base.filter(item => item.to === '/daily-deal-flow')
+  }
+  if (userId.value === RESTRICTED_USER_ID) {
+    return base.filter(item => 
+      item.children?.some((child: any) => child.to?.startsWith('/colombian-'))
+    )
   }
   return base
 })

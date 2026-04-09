@@ -7,12 +7,13 @@ const props = defineProps<{
   period: Period
   range: Range
   retentionOnly?: boolean
+  leadVendors?: string[]
 }>()
 
 const { fetchAllByWorkingDates } = useDailyDealFlow()
 
 const { data: stats } = await useAsyncData(
-  () => `analytics-stats-${formatDateEST(props.range.start)}-${formatDateEST(props.range.end)}-${Boolean(props.retentionOnly)}`,
+  () => `analytics-stats-${formatDateEST(props.range.start)}-${formatDateEST(props.range.end)}-${Boolean(props.retentionOnly)}-${props.leadVendors?.join(',') || 'all'}`,
   async () => {
     const currentBusinessDates = getWorkingDatesBetween(props.range.start, props.range.end, {
       excludeSaturday: true
@@ -21,11 +22,14 @@ const { data: stats } = await useAsyncData(
       excludeSaturday: true
     })
 
-    const { data: currentData, error: currentError } = await fetchAllByWorkingDates({
+    const fetchOptions = {
       dates: currentBusinessDates,
       limit: 10000,
-      offset: 0
-    })
+      offset: 0,
+      ...(props.leadVendors?.length ? { leadVendors: props.leadVendors } : {})
+    }
+
+    const { data: currentData, error: currentError } = await fetchAllByWorkingDates(fetchOptions)
 
     if (currentError) {
       return []
@@ -34,7 +38,8 @@ const { data: stats } = await useAsyncData(
     const { data: previousData, error: previousError } = await fetchAllByWorkingDates({
       dates: previousBusinessDates,
       limit: 10000,
-      offset: 0
+      offset: 0,
+      ...(props.leadVendors?.length ? { leadVendors: props.leadVendors } : {})
     })
 
     const isRetentionOnly = Boolean(props.retentionOnly)
@@ -90,7 +95,7 @@ const { data: stats } = await useAsyncData(
     })
   },
   {
-    watch: [() => props.period, () => props.range, () => props.retentionOnly],
+    watch: [() => props.period, () => props.range, () => props.retentionOnly, () => props.leadVendors],
     default: () => []
   }
 )
